@@ -12,7 +12,9 @@ program test_utils_m
     ! Register tests by providing name and subroutine to run for each test.
     ! Note: this routine does not return but stops the program with the right exit code.
     call execute_serial_cmd_app(testitems=[&
-            test("Real-space 1D grid", test_generate_real_space_grid_1D) &
+            test("Real-space 1D grid", test_generate_real_space_grid_1D), &
+            test("Real-space 2D grid", test_generate_real_space_grid_2D), &
+            test("Real-space 3D grid", test_generate_real_space_grid_3D) &
             ])
   
 contains
@@ -55,5 +57,91 @@ contains
         call check(all(close(grid, ref_grid)), msg="1D grid disagrees with reference")
 
     end subroutine test_generate_real_space_grid_1D
+
+
+    subroutine test_generate_real_space_grid_2D
+        integer      :: sampling(2)
+        real(real64) :: spacings(2, 2)
+        real(real64), allocatable :: grid(:, :), ref_grid(:, :)
+        integer :: n_total
+        integer :: i, j, k, ir
+
+        sampling = [3, 3]
+        spacings = reshape([0.25_real64, 0.00_real64, &
+                            0.00_real64, 0.25_real64], [2, 2])
+        n_total = product(sampling)
+        ref_grid = reshape([ &
+            0.25,  0.25, &     
+            0.50,  0.25, &     
+            0.75,  0.25, &     
+            0.25,  0.50, &     
+            0.50,  0.50, &     
+            0.75,  0.50, &     
+            0.25,  0.75, &     
+            0.50,  0.75, &     
+            0.75,  0.75 ], [2, n_total])
+    
+        allocate(grid(2, n_total))
+        call generate_real_space_grid(sampling, spacings, grid)
+        call check(all(shape(grid) == [2, n_total]))
+        call check(all(close(grid, ref_grid)), msg="2D grid disagrees with reference")
+
+    end subroutine test_generate_real_space_grid_2D
+
+
+    subroutine test_generate_real_space_grid_3D
+        integer      :: sampling(3)
+        real(real64) :: spacings(3, 3), origin(3)
+        real(real64), allocatable :: grid(:, :), ref_grid(:, :)
+        integer :: n_total, i_centre
+
+        sampling = [3, 3, 3]
+        spacings = reshape([1.00_real64, 0.00_real64, 0.00_real64,&
+                            0.00_real64, 1.00_real64, 0.00_real64,&
+                            0.00_real64, 0.00_real64, 1.00_real64], [3, 3])
+        n_total = product(sampling)
+        origin = [2._real64, 2._real64, 2._real64]
+      
+        ref_grid = reshape([ &
+        -1.000000, -1.000000, -1.000000, &
+         0.000000, -1.000000, -1.000000, &
+         1.000000, -1.000000, -1.000000, &
+        -1.000000,  0.000000, -1.000000, &
+         0.000000,  0.000000, -1.000000, &
+         1.000000,  0.000000, -1.000000, &
+        -1.000000,  1.000000, -1.000000, &
+         0.000000,  1.000000, -1.000000, &
+         1.000000,  1.000000, -1.000000, &
+        -1.000000, -1.000000,  0.000000, &
+         0.000000, -1.000000,  0.000000, &
+         1.000000, -1.000000,  0.000000, &
+        -1.000000,  0.000000,  0.000000, &
+         0.000000,  0.000000,  0.000000, &
+         1.000000,  0.000000,  0.000000, &
+        -1.000000,  1.000000,  0.000000, &
+         0.000000,  1.000000,  0.000000, &
+         1.000000,  1.000000,  0.000000, &
+        -1.000000, -1.000000,  1.000000, &
+         0.000000, -1.000000,  1.000000, &
+         1.000000, -1.000000,  1.000000, &
+        -1.000000,  0.000000,  1.000000, &
+         0.000000,  0.000000,  1.000000, &
+         1.000000,  0.000000,  1.000000, &
+        -1.000000,  1.000000,  1.000000, &
+         0.000000,  1.000000,  1.000000, &
+         1.000000,  1.000000,  1.000000  &
+         ], [3, n_total])
+    
+        allocate(grid(3, n_total))
+        call generate_real_space_grid(sampling, spacings, grid, origin=origin)
+        
+        call check(all(shape(grid) == [3, n_total]))
+
+        call check(all(close(grid, ref_grid)), msg="3D grid disagrees with reference")
+
+        i_centre = 14
+        call check(all(close(grid(:, i_centre), [0._real64, 0._real64, 0._real64])), msg="Grid centred on the origin")
+   
+    end subroutine test_generate_real_space_grid_3D
 
 end program test_utils_m
