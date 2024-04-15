@@ -16,10 +16,9 @@ module utils_m
 
 contains
 
-    ! TODO(ALEX Speed up with OMP
-    !> @brief Generate a real-space grid
+    !> @brief Generate a real-space grid.
     !! 
-    !! Produce 1D, 2D and 3D grids
+    !! Produce 1D, 2D and 3D grids.
     !! 
     !!  !One could also implement as integer grid construction, then convert to real spacing:
     !!  ir = 0
@@ -39,12 +38,13 @@ contains
         real(real64), optional, intent(in)  :: origin(:)
         real(real64),           intent(out) :: grid(:, :)  !< real-space grid
 
-        integer :: i, j, k, ir, n_points, n_dims
-        integer, allocatable :: integer_grid(:, :)
+        integer :: i, j, k, jk, ir, n_points, n_dims
+        integer, allocatable :: int_point(:), integer_grid(:, :)
         real(real64), allocatable :: org(:)
 
         n_dims = size(sampling)
         n_points = product(sampling)
+        allocate(int_point(n_dims))
 
         if (.not. present(origin)) then
             allocate(org(n_dims), source=0._real64)
@@ -52,37 +52,37 @@ contains
             allocate(org(n_dims), source=origin)
         endif
 
-        ! TODO Try removing the if and see if it works
         if (n_dims == 1) then
-            ! Can create integer grids, then convert to real 
-            allocate(integer_grid(n_dims, n_points))
+            !$omp parallel do simd default(shared) private(i)
             do i = 1, sampling(1)
-                integer_grid(:, i) = [i]
+                grid(:, i) = real(i, kind=real64) * spacings(1, 1) - org
             enddo
-            ! Reduces to scaling of a vector by a constant
-            grid = spacings(1, 1) * real(integer_grid, kind=real64)
-            grid(1, :) = grid(1, :)  - org(1)
+            !$omp end parallel do simd
 
         else if(n_dims == 2) then
-            ir = 0
+            !$omp parallel do simd collapse(2) default(shared) private(i, j, ir)
             do j = 1, sampling(2)
                 do i = 1, sampling(1)
-                    ir = ir + 1
-                    grid(:, ir) = matmul(spacings, [i, j]) - org(:)
+                    ir = i + (j - 1) * sampling(1)
+                    grid(:, ir) = matmul(spacings, [i, j]) - org
                 enddo   
-            enddo          
+            enddo
+            !$omp end parallel do simd
 
         else if(n_dims == 3) then
-            ir = 0
+            !$omp parallel do simd collapse(3) default(shared) private(i, j, k, ir)
             do k = 1, sampling(3)
                 do j = 1, sampling(2)
                     do i = 1, sampling(1)
-                        ir = ir + 1
-                        grid(:, ir) = matmul(spacings, [i, j, k]) - org(:)
+                        ! Have to evaluate it here to allow loop collapsing
+                        jk = j + (k - 1) * sampling(2)
+                        ir = i + (jk - 1) * sampling(1)
+                        grid(:, ir) = matmul(spacings, [i, j, k]) - org
                     enddo   
                 enddo
             enddo 
-    
+            !$omp end parallel do simd
+
         else
             write(*, *) 'Grid construction with dimensions', n_dims, "is not implemented"
             stop

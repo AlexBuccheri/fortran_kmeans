@@ -17,12 +17,10 @@ set(GCC_DEBUG
     )
 
 # External dependencies
-
-# Blas and lapack
 find_package(BLAS REQUIRED)
-
-# MPI
+find_package(OpenMP REQUIRED)
 find_package(MPI REQUIRED)
+
 add_definitions(${MPI_Fortran_COMPILE_FLAGS})
 include_directories(${MPI_Fortran_INCLUDE_PATH})
 link_directories(${MPI_Fortran_LIBRARIES})
@@ -48,7 +46,12 @@ set_target_properties(lib_kmeans
         LIBRARY_OUTPUT_DIRECTORY ${CMAKE_Fortran_LIB_DIRECTORY}
         )
 
-target_link_libraries(lib_kmeans BLAS::BLAS ${MPI_Fortran_LIBRARIES})
+# Flags
+target_compile_options(lib_kmeans PRIVATE -fopenmp)
+
+# Linked libraries
+target_link_libraries(lib_kmeans BLAS::BLAS OpenMP::OpenMP_Fortran ${MPI_Fortran_LIBRARIES})
+
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 
 # Source code
