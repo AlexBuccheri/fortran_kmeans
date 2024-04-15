@@ -68,3 +68,7 @@ target_link_libraries(test_utils PRIVATE lib_kmeans Fortuno::fortuno_serial)
 add_test(NAME test_generate_real_space_grid_1D COMMAND test_utils)
 add_test(NAME test_generate_real_space_grid_2D COMMAND test_utils)
 add_test(NAME test_generate_real_space_grid_3D COMMAND test_utils)
+
+add_executable(test_kmeans tests/test_kmeans_m.f90)
+target_link_libraries(test_kmeans PRIVATE lib_kmeans Fortuno::fortuno_serial)
+add_test(NAME test_assign_points_to_centroids COMMAND test_kmeans)
