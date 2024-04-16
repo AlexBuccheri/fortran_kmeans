@@ -76,6 +76,7 @@ add_test(NAME test_generate_real_space_grid_1D COMMAND test_utils)
 add_test(NAME test_generate_real_space_grid_2D COMMAND test_utils)
 add_test(NAME test_generate_real_space_grid_3D COMMAND test_utils)
 add_test(NAME test_linspace COMMAND test_utils)
+add_test(NAME test_linspace_to_grid2d COMMAND test_utils)
 
 
 add_executable(test_kmeans tests/test_kmeans_m.f90)

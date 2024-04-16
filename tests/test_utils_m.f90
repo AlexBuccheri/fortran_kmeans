@@ -15,7 +15,8 @@ program test_utils_m
             test("Real-space 1D grid", test_generate_real_space_grid_1D), &
             test("Real-space 2D grid", test_generate_real_space_grid_2D), &
             test("Real-space 3D grid", test_generate_real_space_grid_3D), &
-            test("Linear spaced sampling", test_linspace) &
+            test("Linear spaced sampling", test_linspace), &
+            test("2D linear grid", test_linspace_to_grid2d) &
             ])
   
 contains
@@ -156,9 +157,27 @@ contains
         call linspace(1._dp, 10.0_dp, size(y), y, end_point=.false.)
         call check(all(close(x, [1._dp, 2._dp, 3._dp, 4._dp, 5._dp, 6._dp, 7._dp, 8._dp, 9._dp])))
 
-
     end subroutine test_linspace
 
 
+    subroutine test_linspace_to_grid2d
+        real(dp) :: x(5), y(5)
+        real(dp), allocatable :: grid(:, :)
+        integer :: i
+
+        call linspace(1._dp,  5.0_dp, size(x), x)
+        call linspace(1._dp, 10.0_dp, size(y), y)
+        allocate(grid(2, 25))
+        call linspace_to_grid(x, y, grid)
+        ! TODO(Alex) Assert the 2D grid
+        ! do i = 1, 25
+        !     write(*, *) grid(:, i)
+        ! enddo
+
+    end subroutine test_linspace_to_grid2d
+
+    ! TODO(Alex) test_linspace_to_grid3d
+
+    ! TODO(Alex) Write and test Gaussians evaluated on a 2D grid
 
 end program test_utils_m

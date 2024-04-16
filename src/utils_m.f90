@@ -12,7 +12,11 @@ module utils_m
         integer :: np    !< number of processes for this communicator
     end type mpi_t
 
-    public :: generate_real_space_grid, linspace !, generate_gaussian
+    public :: generate_real_space_grid, linspace, linspace_to_grid  !, generate_gaussian
+
+    interface linspace_to_grid
+        module procedure :: linspace_to_grid2d, linspace_to_grid3d, linspace_to_grid_suboptimal
+    end interface linspace_to_grid
 
 contains
 
@@ -129,31 +133,91 @@ contains
     end subroutine linspace
 
 
-    ! !> @brief Create a 3D grid from linear-spaced data
-    ! subroutine linspace_to_grid3D(x, y, z, n_points, grid, origin)
-    !     real(real64), contiguous, intent(in)  :: x(:)
-    !     real(real64), contiguous, intent(in)  :: y(:)
-    !     real(real64), contiguous, intent(in)  :: z(:)
+    !> @brief Create an ND grid from linear-spaced data
+    !!
+    !! Data is passed as a contiguous 1D array, so one also
+    !! needs to pass the number of x, y, z, ... points for
+    !! the routine to distinguish dimensions. 
+    !! THIS IS BAD - requires discontiguous access of the `ranges` or `grid` array, 
+    !! which for large grids will create numerous cache misses.
+    !! Unless I return grid(n_points, n_dim)... which is usually not desirable.
+    !!
+    !! ```fortran
+    !! call linspace(1._dp, 10.0_dp, 10, x)
+    !! call linspace(1._dp, 20.0_dp, 10, y)
+    !! call linspace_to_grid3D([x, y], grid_2d)
+    !! ```
+    subroutine linspace_to_grid_suboptimal(ranges, n_points, grid)
+        real(real64), contiguous, intent(in)  :: ranges(:)
+        integer,                  intent(in)  :: n_points(:)
+        real(real64),             intent(out) :: grid(:, :)  !< real-space grid
 
-    !     real(real64),           intent(out) :: grid(:, :)  !< real-space grid
+        integer :: idim, ix, ir
 
-    !     integer                    :: n_dims, i
-    !     real(real64), allocatable  :: spacings(:, :)
-    !     real(real64), allocatable  :: origin(:)
+        ! assert size(grid, 1) == product(n_points)
+        ir = 0
+        do idim = 1, size(n_points)
+            do ix = 1, n_points(idim)
+                ir = ir + 1
+                grid(ir, idim) = ranges(ix)
+            enddo
+        enddo
 
-    !     n_dims = size(limits, 2)
-        
-    !     do k = 1, 
-    !     do j = 1, 
-    !     do i = 1, 
-
-         
+    end subroutine linspace_to_grid_suboptimal
 
 
-    ! end subroutine linspace_to_grid3D
+    !> @brief Create a 2D grid from linear-spaced data
+    subroutine linspace_to_grid2d(x, y, grid)
+        real(real64), contiguous, intent(in)  :: x(:), y(:)
+        real(real64),             intent(out) :: grid(:, :)  !< real-space grid
+        integer :: nx, ny, i, j, ir
+
+        nx = size(x)
+        ny = size(y)
+        ! assert size(grid, 2) == nx * ny
+
+        !$omp parallel do simd collapse(2) default(shared) private(i, j, ir)
+        do j = 1, ny
+            do i = 1, nx
+                ir = i + (j - 1) * nx
+                ! y(j) accessed per inner loop so one can collapse the loops with OMP
+                grid(:, ir) = [x(i), y(j)]
+            enddo
+        enddo
+        !$omp end parallel do simd
+
+    end subroutine linspace_to_grid2d
+
+
+    !> @brief Create a 3D grid from linear-spaced data
+    subroutine linspace_to_grid3d(x, y, z, grid)
+        real(real64), contiguous, intent(in)  :: x(:), y(:), z(:)
+        real(real64),             intent(out) :: grid(:, :)  !< real-space grid
+
+        integer :: nx, ny, nz, i, j, k, ir, jk
+
+        nx = size(x)
+        ny = size(y)
+        nz = size(z)
+        ! assert size(grid, 2) == nx * ny * nz
+
+        !$omp parallel do simd collapse(3) default(shared) private(i, j, k, ir)
+        do k = 1, nz
+            do j = 1, ny
+                do i = 1, nx
+                    ! jk, y(j), z(k) accessed per inner loop so one can collapse the loops with OMP
+                    jk = j + (k - 1) * ny
+                    ir = i + (jk - 1) * nx
+                    grid(:, ir) = [x(i), y(j), z(k)]
+                enddo
+            enddo
+        enddo
+        !$omp end parallel do simd
+
+    end subroutine linspace_to_grid3d
+
 
     ! subroutine generate_gaussian()
     ! end subroutine generate_gaussian
-
 
 end module utils_m
