@@ -25,14 +25,21 @@ add_definitions(${MPI_Fortran_COMPILE_FLAGS})
 include_directories(${MPI_Fortran_INCLUDE_PATH})
 link_directories(${MPI_Fortran_LIBRARIES})
 
-# Fortuno unit testing framework - builds the serial version
+# Fortuno unit testing framework
 include(FetchContent)
+
 FetchContent_Declare(
   Fortuno
   GIT_REPOSITORY "https://github.com/fortuno-repos/fortuno"
   GIT_TAG "main"
 )
+FetchContent_Declare(
+  FortunoMPI
+  GIT_REPOSITORY "https://github.com/fortuno-repos/fortuno-mpi"
+  GIT_TAG "main"
+)
 FetchContent_MakeAvailable(Fortuno)
+FetchContent_MakeAvailable(FortunoMPI)
 
 # This library
 add_library(lib_kmeans "")
@@ -68,7 +75,9 @@ target_link_libraries(test_utils PRIVATE lib_kmeans Fortuno::fortuno_serial)
 add_test(NAME test_generate_real_space_grid_1D COMMAND test_utils)
 add_test(NAME test_generate_real_space_grid_2D COMMAND test_utils)
 add_test(NAME test_generate_real_space_grid_3D COMMAND test_utils)
+add_test(NAME test_linspace COMMAND test_utils)
+
 
 add_executable(test_kmeans tests/test_kmeans_m.f90)
-target_link_libraries(test_kmeans PRIVATE lib_kmeans Fortuno::fortuno_serial)
+target_link_libraries(test_kmeans PRIVATE lib_kmeans Fortuno::fortuno_serial Fortuno::fortuno_mpi) 
 add_test(NAME test_assign_points_to_centroids COMMAND test_kmeans)

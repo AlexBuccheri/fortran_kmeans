@@ -12,10 +12,13 @@ module utils_m
         integer :: np    !< number of processes for this communicator
     end type mpi_t
 
-    public :: generate_real_space_grid !, generate_gaussian
+    public :: generate_real_space_grid, linspace !, generate_gaussian
 
 contains
 
+
+    ! TODO(Alex) Does not make the most sense to provide both sampling and spacing => One has to work
+    ! out what their box limits are
     !> @brief Generate a real-space grid.
     !! 
     !! Produce 1D, 2D and 3D grids.
@@ -90,6 +93,64 @@ contains
 
     end subroutine generate_real_space_grid
 
+
+    !> @ brief Return evenly spaced numbers over a specified interval.
+    !! Returns num evenly spaced samples, calculated over the interval [start, stop].
+    !!
+    !! Spacing not returned, but is trivially grid(2) - grid(1)
+    !! 
+    !! Based on https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
+    subroutine linspace(start, stop, n_points, grid, end_point)
+        real(real64),      intent(in)  :: start
+        real(real64),      intent(in)  :: stop
+        integer,           intent(in)  :: n_points
+        logical, optional, intent(in)  :: end_point      !< The endpoint of the interval can optionally be excluded.
+        real(real64),      intent(out) :: grid(n_points) !< real-space grid
+
+        integer :: i
+        real(real64) :: dx
+        logical :: include_end_point
+
+        include_end_point = .true.
+        if (present(end_point)) include_end_point = end_point
+
+        if (include_end_point) then
+            dx = (stop - start) / real(n_points - 1, real64)
+        else
+            dx = (stop - start) / real(n_points, real64)
+        endif
+
+        !$omp parallel do simd default(shared) private(i)
+        do i = 1, n_points
+            grid(i) = start + (i - 1) * dx
+        enddo
+        !$omp end parallel do simd
+
+    end subroutine linspace
+
+
+    ! !> @brief Create a 3D grid from linear-spaced data
+    ! subroutine linspace_to_grid3D(x, y, z, n_points, grid, origin)
+    !     real(real64), contiguous, intent(in)  :: x(:)
+    !     real(real64), contiguous, intent(in)  :: y(:)
+    !     real(real64), contiguous, intent(in)  :: z(:)
+
+    !     real(real64),           intent(out) :: grid(:, :)  !< real-space grid
+
+    !     integer                    :: n_dims, i
+    !     real(real64), allocatable  :: spacings(:, :)
+    !     real(real64), allocatable  :: origin(:)
+
+    !     n_dims = size(limits, 2)
+        
+    !     do k = 1, 
+    !     do j = 1, 
+    !     do i = 1, 
+
+         
+
+
+    ! end subroutine linspace_to_grid3D
 
     ! subroutine generate_gaussian()
     ! end subroutine generate_gaussian
