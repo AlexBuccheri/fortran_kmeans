@@ -16,7 +16,8 @@ program test_utils_m
             test("Real-space 2D grid", test_generate_real_space_grid_2D), &
             test("Real-space 3D grid", test_generate_real_space_grid_3D), &
             test("Linear spaced sampling", test_linspace), &
-            test("2D linear grid", test_linspace_to_grid2d) &
+            test("2D linear grid", test_linspace_to_grid2d), & 
+            test("2D Gaussian", test_generate_gaussian_2d) &
             ])
   
 contains
@@ -162,22 +163,87 @@ contains
 
     subroutine test_linspace_to_grid2d
         real(dp) :: x(5), y(5)
-        real(dp), allocatable :: grid(:, :)
+        real(dp), allocatable :: grid(:, :), ref_grid(:, :)
         integer :: i
+
+        allocate(grid(2, 25), ref_grid(2, 25))
+        ref_grid = reshape([&
+          1.0_dp,  1.00_dp, &    
+          2.0_dp,  1.00_dp, &    
+          3.0_dp,  1.00_dp, &    
+          4.0_dp,  1.00_dp, &    
+          5.0_dp,  1.00_dp, &    
+          1.0_dp,  3.25_dp, &    
+          2.0_dp,  3.25_dp, &    
+          3.0_dp,  3.25_dp, &    
+          4.0_dp,  3.25_dp, &    
+          5.0_dp,  3.25_dp, &    
+          1.0_dp,  5.50_dp, &    
+          2.0_dp,  5.50_dp, &    
+          3.0_dp,  5.50_dp, &    
+          4.0_dp,  5.50_dp, &    
+          5.0_dp,  5.50_dp, &    
+          1.0_dp,  7.75_dp, &    
+          2.0_dp,  7.75_dp, &    
+          3.0_dp,  7.75_dp, &    
+          4.0_dp,  7.75_dp, &    
+          5.0_dp,  7.75_dp, &    
+          1.0_dp,  10.0_dp, &    
+          2.0_dp,  10.0_dp, &    
+          3.0_dp,  10.0_dp, &    
+          4.0_dp,  10.0_dp, &    
+          5.0_dp,  10.0_dp], [2, 25])
 
         call linspace(1._dp,  5.0_dp, size(x), x)
         call linspace(1._dp, 10.0_dp, size(y), y)
-        allocate(grid(2, 25))
         call linspace_to_grid(x, y, grid)
-        ! TODO(Alex) Assert the 2D grid
-        ! do i = 1, 25
-        !     write(*, *) grid(:, i)
-        ! enddo
+
+        call check(all(close(grid, ref_grid)))
 
     end subroutine test_linspace_to_grid2d
 
+
+    subroutine test_generate_gaussian_2d
+        real(dp), allocatable :: x(:), y(:), grid(:, :)
+        real(dp), allocatable :: mean(:, :), sigma(:)
+        real(dp), allocatable :: gaussian(:), total_gaussian(:)
+        integer :: nx, ny, ir, ix, iy, i
+
+        nx = 50
+        ny = 50
+        allocate(x(nx), y(ny), grid(2, nx * ny))
+        call linspace(1._dp, 5.0_dp, nx, x)
+        call linspace(1._dp, 5.0_dp, ny, y)
+        call linspace_to_grid(x, y, grid)
+
+        ! Create a gaussian in each quadrant of the 2D grid
+        allocate(gaussian(nx * ny), total_gaussian(nx * ny))
+        sigma = [0.4_dp, 0.4_dp]
+        mean = reshape([2._dp, 2._dp, &
+                        2._dp, 4._dp, &
+                        4._dp, 2._dp, &
+                        4._dp, 4._dp], [2, 4])
+
+        total_gaussian = 0._dp
+        do i = 1, 4
+            call generate_gaussian(mean(:, i), sigma, grid, gaussian)
+            total_gaussian = total_gaussian + gaussian
+        enddo
+
+        ! Output for gnuplot
+        ! ir = 0
+        ! do iy = 1 , ny
+        !     do ix = 1, nx
+        !         ir = ir + 1
+        !         write(100, *) grid(:, ir), total_gaussian(ir)
+        !     enddo
+        !     write(100, *)
+        ! enddo
+
+    end subroutine test_generate_gaussian_2d
+
+
     ! TODO(Alex) test_linspace_to_grid3d
 
-    ! TODO(Alex) Write and test Gaussians evaluated on a 2D grid
 
 end program test_utils_m

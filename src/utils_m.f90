@@ -12,7 +12,7 @@ module utils_m
         integer :: np    !< number of processes for this communicator
     end type mpi_t
 
-    public :: generate_real_space_grid, linspace, linspace_to_grid  !, generate_gaussian
+    public :: generate_real_space_grid, linspace, linspace_to_grid, generate_gaussian
 
     interface linspace_to_grid
         module procedure :: linspace_to_grid2d, linspace_to_grid3d, linspace_to_grid_suboptimal
@@ -217,7 +217,31 @@ contains
     end subroutine linspace_to_grid3d
 
 
-    ! subroutine generate_gaussian()
-    ! end subroutine generate_gaussian
+    !> @brief Generate a Gaussian on a grid
+    !!
+    !! TODO Give maths
+    subroutine generate_gaussian(mean, sigma, grid, gaussian)
+        real(real64), intent(in)  :: mean(:)        !< Centre of the Gaussian
+        real(real64), intent(in)  :: sigma(:)       !< Width of the Gaussian
+        real(real64), intent(in)  :: grid(:, :)     !< Grid on which to evaluate the Gaussian
+        real(real64), intent(out) :: gaussian(:)  !< Gaussian
+
+        real(real64), parameter :: pi = 3.14159265359_real64
+        integer :: ir
+        real(real64) :: n, n_dim, exponent, norm
+
+        n_dim = real(size(mean), real64)
+        n =  0.5 * n_dim
+        norm = 1._real64  / (product(sigma) * (2._real64 * pi)**n)
+
+        !$omp parallel do simd default(shared) private(ir, exponent)
+        do ir = 1, size(grid, 2)
+            ! (r -r0) / sigma
+            exponent = sum((grid(:, ir) - mean(:))**2._real64 / sigma(:)**2._real64)
+            gaussian(ir) =  norm * exp(-0.5_real64 * exponent)
+        enddo
+       !$omp end parallel do simd
+
+    end subroutine generate_gaussian
 
 end module utils_m
