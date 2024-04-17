@@ -230,6 +230,8 @@ contains
             total_gaussian = total_gaussian + gaussian
         enddo
 
+        ! TODO(Alex) Note, this is a demonstration but it does not assert anything
+
         ! Output for gnuplot
         ! ir = 0
         ! do iy = 1 , ny
