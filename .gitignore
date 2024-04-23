@@ -2,3 +2,5 @@
 /cmake-build*
 # VS Code files
 *.mod 
+# Fortran outputs i.e. write(101, *) ...
+fort.*
