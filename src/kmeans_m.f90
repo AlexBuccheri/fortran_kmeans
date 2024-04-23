@@ -7,7 +7,8 @@ module kmeans_m
     implicit none
 
     private
-    public :: assign_points_to_centroids, update_centroids, points_are_converged
+    public :: assign_points_to_centroids, update_centroids, compute_grid_difference, &
+              report_differences_in_grids
 
 contains
 
@@ -105,47 +106,98 @@ contains
 
     !> @brief Given the difference in two sets of points, determine whether the updated
     !!        points are sufficiently close to the prior points.
-    function points_are_converged(updated_points, points, tol, verbose) result(converged)
-        real(real64), intent(in)    :: updated_points(:, :), points(:, :) !< Real-space grids (n_dims, N)
-        real(real64), intent(in)    :: tol
-        logical, intent(in), optional :: verbose
-        logical :: converged
+    ! function points_are_converged(points, updated_points, tol, verbose) result(converged)
+    !     real(real64), intent(in)    :: updated_points(:, :), points(:, :) !< Real-space grids (n_dims, N)
+    !     real(real64), intent(in)    :: tol
+    !     logical, intent(in), optional :: verbose
+    !     logical :: converged
 
-        logical :: print_out
-        integer :: n_dims, n_points, n_unconverged, i
-        real(real64), allocatable :: norm(:)   !< norm of each vector (a_i - b_i)
+    !     logical :: print_out
+    !     integer :: n_dims, n_points, n_unconverged, i
+    !     real(real64), allocatable :: norm(:)   !< norm of each vector (a_i - b_i)
 
-        n_dims = size(updated_points, 1)
-        n_points = size(updated_points, 2)
-        allocate(norm(n_points))
+    !     n_dims = size(updated_points, 1)
+    !     n_points = size(updated_points, 2)
+    !     allocate(norm(n_points))
 
-        print_out = .false.
-        if (present(verbose)) then
-            if (verbose) print_out = .true.
-        endif
+    !     print_out = .false.
+    !     if (present(verbose)) then
+    !         if (verbose) print_out = .true.
+    !     endif
 
-        !$omp parallel do simd default(shared) private(i)
-        do i = 1, n_points
-            norm(i) = norm2(updated_points(:, i) - points(:, i))
+    !     !$omp parallel do simd default(shared) private(i)
+    !     do i = 1, n_points
+    !         norm(i) = norm2(updated_points(:, i) - points(:, i))
+    !     enddo
+    !     !$omp end parallel do simd
+
+    !     if(print_out) then
+    !         write(*, *) "# Current Point  ,  Prior Point  ,  |ri - r_{i-1}|  ,  tol"
+    !         n_unconverged = 0
+    !         do i = 1, n_points
+    !             if (norm(i) > tol) then
+    !                 write(*, *) updated_points(:, i), points(:, i), norm(i), tol
+    !                 n_unconverged = n_unconverged + 1
+    !             endif
+    !         enddo
+    !         write(*, *) "Summary:", n_unconverged, "of out", n_points, "are not converged"
+    !         converged = n_unconverged == 0
+    !     else
+    !         converged = .not. any(norm > tol)
+    !     endif
+
+    ! end function points_are_converged
+
+    ! TODO(Alex) Document exactly what this is computing/returning
+    subroutine compute_grid_difference(points, updated_points, tol, points_differ)
+        real(real64), intent(in)  :: points(:, :)      !< Real-space grids (n_dims, N)
+        real(real64), intent(in)  :: updated_points(:, :)
+        real(real64), intent(in)  :: tol
+        logical,      intent(out) :: points_differ(:)     !< |a_i - b_i|
+       
+        integer      ::  i, n_dim
+        real(real64), allocatable :: diff(:)
+
+        n_dim = size(points, 1)
+        allocate(diff(n_dim))
+
+        !$omp parallel do simd default(shared) private(i, diff)
+        do i = 1, size(points, 2)
+            diff(:) = abs(updated_points(:, i) - points(:, i))
+            points_differ(i) = any(diff > tol)
         enddo
         !$omp end parallel do simd
 
-        if(print_out) then
-            write(*, *) "# Current Point  ,  Prior Point  ,  |ri - r_{i-1}|  ,  tol"
-            n_unconverged = 0
-            do i = 1, n_points
-                if (norm(i) > tol) then
-                    write(*, *) updated_points(:, i), points(:, i), norm(i), tol
-                    n_unconverged = n_unconverged + 1
-                endif
-            enddo
-            write(*, *) "Summary:", n_unconverged, "of out", n_points, "are not converged"
-            converged = n_unconverged == 0
-        else
-            converged = .not. any(norm > tol)
-        endif
+    end subroutine compute_grid_difference
+  
 
-    end function points_are_converged
+    ! This routine can be less efficient as it should not be called in production runs
+    ! or perhaps more accurately, when things are working
+    subroutine report_differences_in_grids(points, updated_points, tol, points_differ)
+        real(real64), intent(in)  :: points(:, :)      !< Real-space grids (n_dims, N)
+        real(real64), intent(in)  :: updated_points(:, :)
+        real(real64), intent(in)  :: tol
+        logical,      intent(in)  :: points_differ(:)   !< If any element of point i > tol
+        
+        integer, allocatable :: indices(:)
+        integer :: i, j, n_unconverged
+        real(real64), allocatable :: diff(:)
+        character(len=100) :: fmt
+
+        indices = pack([(i, i=1,size(points_differ))], points_differ)
+        n_unconverged = size(indices)
+        allocate(diff(size(points, 1)))
+
+        ! TODO Generalise for the pretty print... although it's absolutely not worth the hassle
+        write(*, *) "# Current Point  ,  Prior Point  ,  |ri - r_{i-1}|  ,  tol"
+        do j = 1, n_unconverged
+            i = indices(j)
+            diff(:) = abs(updated_points(:, i) - points(:, i))
+            write(*, '(2(F16.10, X), 2(F16.10, X), 2(F16.10, X), F16.10)') updated_points(:, i), points(:, i), diff, tol
+        enddo
+        write(*, *) "Summary:", n_unconverged, "of out", size(points, 2), "are not converged"
+   
+    end subroutine report_differences_in_grids
 
     ! !> @brief Weighted K-means clustering.
     ! subroutine weighted_kmeans()

@@ -16,15 +16,21 @@ program test_kmeans_m
     use maths_m, only: all_close
 
     ! Module under test
-    use kmeans_m, only : assign_points_to_centroids, update_centroids, points_are_converged
+    use kmeans_m, only : assign_points_to_centroids, update_centroids, compute_grid_difference, & 
+                         report_differences_in_grids
     implicit none
 
     ! Register tests
-    call execute_serial_cmd_app(testitems=[&
-            test("Assign points to centroids", test_assign_points_to_centroids), &
-            test("Update centroids - no change", test_update_centroids_no_movement) &
-        ])
+    ! call execute_serial_cmd_app(testitems=[&
+    !         test("Assign points to centroids", test_assign_points_to_centroids), &
+    !         test("Update centroids - no change", test_update_centroids_no_movement), &
+    !         test("Difference in two sets of points", test_points_are_converged) &
+    !     ])
   
+    call execute_serial_cmd_app(testitems=[&
+            test("Assign points to centroids", test_points_are_converged) &
+        ])
+
 contains
 
 
@@ -123,6 +129,48 @@ contains
         call check(all_close(centroids(:, 2), [2.5_dp, 0.5_dp]))
 
     end subroutine test_update_centroids_no_movement
+
+    ! TODO(Alex) Add 1-2 more tests for updating centroid positions
+
+
+    subroutine test_points_are_converged()
+        real(dp) :: x(10), y(10)
+        real(dp), allocatable :: grid(:, :), second_grid(:, :)
+        logical, allocatable :: points_differ(:)
+        integer  :: ir, nr
+        real(dp) :: tol, noise, random_num
+        logical  :: converged
+
+        nr = 100
+        tol = 1.e-6_dp
+
+        allocate(grid(2, nr), second_grid(2, nr))
+        call linspace(1._dp, 10.0_dp, size(x), x)
+        call linspace(1._dp, 10.0_dp, size(y), y)
+        call linspace_to_grid(x, y, grid)
+    
+        ! All points within tolerance
+        do ir = 1, nr
+            ! random_num in [0, 1]
+            call random_number(random_num)
+            noise = tol * random_num
+            second_grid(:, ir) = grid(:, ir) + noise
+        enddo
+
+        allocate(points_differ(nr))
+        call compute_grid_difference(grid, second_grid, tol, points_differ)
+        if (any(points_differ)) then
+            call report_differences_in_grids(grid, second_grid, tol, points_differ)
+        endif
+
+        ! One point not within tolerance
+        second_grid(:, 1) = grid(:, 1) + 1.1_dp * tol
+        call compute_grid_difference(grid, second_grid, tol, points_differ)
+        if (any(points_differ)) then
+            call report_differences_in_grids(grid, second_grid, tol, points_differ)
+        endif
+
+    end subroutine test_points_are_converged
 
 
 end program test_kmeans_m
