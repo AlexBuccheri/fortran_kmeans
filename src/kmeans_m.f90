@@ -105,50 +105,6 @@ contains
     end subroutine update_centroids
 
 
-    !> @brief Given the difference in two sets of points, determine whether the updated
-    !!        points are sufficiently close to the prior points.
-    ! function points_are_converged(points, updated_points, tol, verbose) result(converged)
-    !     real(real64), intent(in)    :: updated_points(:, :), points(:, :) !< Real-space grids (n_dims, N)
-    !     real(real64), intent(in)    :: tol
-    !     logical, intent(in), optional :: verbose
-    !     logical :: converged
-
-    !     logical :: print_out
-    !     integer :: n_dims, n_points, n_unconverged, i
-    !     real(real64), allocatable :: norm(:)   !< norm of each vector (a_i - b_i)
-
-    !     n_dims = size(updated_points, 1)
-    !     n_points = size(updated_points, 2)
-    !     allocate(norm(n_points))
-
-    !     print_out = .false.
-    !     if (present(verbose)) then
-    !         if (verbose) print_out = .true.
-    !     endif
-
-    !     !$omp parallel do simd default(shared) private(i)
-    !     do i = 1, n_points
-    !         norm(i) = norm2(updated_points(:, i) - points(:, i))
-    !     enddo
-    !     !$omp end parallel do simd
-
-    !     if(print_out) then
-    !         write(*, *) "# Current Point  ,  Prior Point  ,  |ri - r_{i-1}|  ,  tol"
-    !         n_unconverged = 0
-    !         do i = 1, n_points
-    !             if (norm(i) > tol) then
-    !                 write(*, *) updated_points(:, i), points(:, i), norm(i), tol
-    !                 n_unconverged = n_unconverged + 1
-    !             endif
-    !         enddo
-    !         write(*, *) "Summary:", n_unconverged, "of out", n_points, "are not converged"
-    !         converged = n_unconverged == 0
-    !     else
-    !         converged = .not. any(norm > tol)
-    !     endif
-
-    ! end function points_are_converged
-
     ! TODO(Alex) Document exactly what this is computing/returning
     subroutine compute_grid_difference(points, updated_points, tol, points_differ)
         real(real64), intent(in)  :: points(:, :)      !< Real-space grids (n_dims, N)
@@ -164,6 +120,7 @@ contains
 
         !$omp parallel do simd default(shared) private(i, diff)
         do i = 1, size(points, 2)
+            points_differ(i) = .false.
             diff(:) = abs(updated_points(:, i) - points(:, i))
             points_differ(i) = any(diff > tol)
         enddo
