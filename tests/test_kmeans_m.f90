@@ -12,23 +12,23 @@ program test_kmeans_m
 
     ! Required modules
     use mpi_m,   only: mpi_t   
-    use grids_m, only: linspace, linspace_to_grid
+    use grids_m, only: linspace, linspace_to_grid, generate_gaussian
     use maths_m, only: all_close
 
     ! Module under test
     use kmeans_m, only : assign_points_to_centroids, update_centroids, compute_grid_difference, & 
-                         report_differences_in_grids
+                         report_differences_in_grids, weighted_kmeans
     implicit none
 
     ! Register tests
     call execute_serial_cmd_app(testitems=[&
             test("Assign points to centroids", test_assign_points_to_centroids),     &
             test("Update centroids - no change", test_update_centroids_no_movement), &
-            test("Difference in two sets of points", test_points_are_converged)      &
+            test("Difference in two sets of points", test_points_are_converged),     &  
+            test("Run weighted k-means", test_weighted_kmeans)     & 
         ])
 
 contains
-
 
     subroutine test_assign_points_to_centroids
         type(mpi_t) :: serial_comm
@@ -173,6 +173,175 @@ contains
         endif
 
     end subroutine test_points_are_converged
+
+
+    ! Setup routine
+    subroutine construct_2d_grid(sampling, ranges, grid)
+        integer,  intent(in)               :: sampling(:)
+        real(dp), intent(in)               :: ranges(:, :)
+        real(dp), allocatable, intent(out) :: grid(:, :)
+        real(dp), allocatable  :: x(:), y(:)
+
+        integer :: nx, ny
+        
+        nx = sampling(1)
+        ny = sampling(1)
+        allocate(x(nx), y(ny), grid(2, nx * ny))
+        call linspace(ranges(1, 1), ranges(2, 1), nx, x)
+        call linspace(ranges(1, 2), ranges(2, 2), ny, y)
+        call linspace_to_grid(x, y, grid)
+
+    end subroutine construct_2d_grid
+
+
+    ! Setup routine
+    subroutine construct_gaussians_on_grid(mean, sigma, grid, total_gaussian)
+        real(dp), intent(in)   :: mean(:, :)  !< mean, shape (n_dim, n_gauss)
+        real(dp), intent(in)   :: sigma(:)    !< Same broadening for all Gaussians, shape (n_dim)
+        real(dp), intent(in)   :: grid(:, :)  !< shape(n_dim, nr)
+
+        integer                :: n_dim, nr, n_gauss, i
+        real(dp), allocatable  :: gaussian(:)
+        real(dp), intent(out)  :: total_gaussian(:)
+
+        n_dim = size(grid, 1)
+        nr = size(grid, 2)
+        n_gauss = size(mean, 2)
+        total_gaussian = 0._dp
+
+        allocate(gaussian(nr))
+
+        do i = 1, n_gauss
+            call generate_gaussian(mean(:, i), sigma, grid, gaussian)
+            total_gaussian = total_gaussian + gaussian
+        enddo
+
+    end subroutine construct_gaussians_on_grid
+
+
+    ! TODO(Alex) Make this work as required
+    !> Generate `n` random integers from the range [1, m]
+    ! subroutine random_points(m, n, points, fixed_seed)
+    !     integer, intent(in) :: m          !< Integer range of values [1: m]
+    !     integer, intent(in) :: n          !< Number of random integers to generate
+    !     integer, intent(out) :: points(n) !< Random integers
+    !     integer, optional, intent(in) :: fixed_seed  !< Fix seed for reproducibility
+
+    !     integer              :: i, rand_index, my_size
+    !     real(dp)             :: rand_val
+    !     integer, allocatable :: state(:)
+
+    !     if (present(fixed_seed)) then
+    !         call random_seed(size=my_size)
+    !         allocate(state(my_size))
+    !         call random_seed(put=state)
+    !     endif
+
+    !     ! TODO Should probably do some seed init for randomness
+    !     ! call random_init(.true., .false.)
+
+    !     do i = 1, n
+    !         ! Generate a random real number [0, 1]
+    !         call random_number(rand_val)
+    !         ! Scale rand_val to range [1, m]
+    !         rand_index = 1 + floor(rand_val * m)
+    !         points(i) = rand_index
+    !     end do
+
+    ! end subroutine random_points
+
+
+    subroutine test_weighted_kmeans()
+        ! MPI
+        type(mpi_t) :: serial_comm
+        ! Grid
+        integer,  parameter  :: n_dim = 2
+        integer              :: nr
+        integer              :: sampling(n_dim)
+        real(dp)             :: ranges(n_dim, 2)
+        real(dp), allocatable :: grid(:, :)
+        ! Gaussian
+        integer,  parameter  :: n_gauss = 4
+        real(dp)  :: mean(n_dim, n_gauss), sigma(n_dim)
+        real(dp), allocatable :: gaussian(:), total_gaussian(:)
+        ! Centroids
+        integer,  allocatable :: indices(:)
+        real(dp), allocatable :: centroids(:, :)
+
+        integer :: ix, iy, ir, n_iter, i, n_centroid
+        logical :: verbose
+        integer, parameter :: seed = 20180815
+
+        ! Mocked comm
+        serial_comm = mpi_t(1, 1, 1)
+
+        ! Grid
+        sampling = [50, 50]
+        nr = product(sampling)
+        ranges(:, 1) = [1._dp, 5.0_dp]
+        ranges(:, 2) = [1._dp, 5.0_dp]
+        call construct_2d_grid(sampling, ranges, grid)
+
+        ! Gaussians on a grid
+        sigma = [0.4_dp, 0.4_dp]
+        mean = reshape([2._dp, 2._dp, &
+                        2._dp, 4._dp, &
+                        4._dp, 2._dp, &
+                        4._dp, 4._dp], [n_dim, n_gauss])
+        allocate(total_gaussian(nr))
+        call construct_gaussians_on_grid(mean, sigma, grid, total_gaussian)
+
+        ! Output Gaussians for gnuplot
+        ir = 0
+        do iy = 1 , sampling(2)
+            do ix = 1, sampling(1)
+                ir = ir + 1
+                write(100, *) grid(:, ir), total_gaussian(ir)
+            enddo
+            write(100, *)
+        enddo
+
+        ! Optimal centroids
+        n_centroid = 25
+        n_iter = 50
+        verbose = .true.
+        allocate(centroids(n_dim, n_centroid))
+
+        ! Pick random points, with a fixed seed such that it's reproducible... or just hard-code for now
+        allocate(indices(n_centroid))
+        indices = [1178, 294, 1637, 282, 2353, 986, 496, 998, 1563, 1522, 1013, 1566, 1534, 2339, &
+                   679, 43, 559, 257, 2218, 321, 790, 2021, 738, 283, 798]
+
+        ! Assign initial centroids
+        do i = 1, n_centroid
+            ir = indices(i)
+            centroids(:, i) = grid(:, ir)
+            ! Output initial centroids for plotting over Gaussians
+            ! 3rd column is a dummy value for plotting
+            write(101, *) grid(:, ir), 0._dp
+        enddo
+    
+        call weighted_kmeans(serial_comm, grid, total_gaussian, centroids, n_iter, verbose=verbose)
+
+        ! Output final centroids for plotting over Gaussians
+        do i = 1, n_centroid
+            write(102, *) centroids(:, i), 0._dp
+        enddo
+
+        ! GNUPLOTing:
+        ! set term x11
+        ! splot 'fort.100' u 1:2:3 w l title'Gaussian weighting'
+        ! replot 'fort.101' u 1:2:3 w p lc 'red' title'Initial centroids'
+        ! replot 'fort.102' u 1:2:3 w p lc blue title'Optimised centroids'
+
+        ! TODOs:
+        ! Assert on the number of iterations used
+        ! Test https://docs.lfortran.org/en/installation/ for notebook 
+        ! Assert final centroid positions -> Regression test rather than unit
+        ! Check if they fall on grid points -> If not, pin them to the closest grid points
+        ! Move on to a) Parallelisation and b) greedy k-means
+
+    end subroutine test_weighted_kmeans
 
 
 end program test_kmeans_m

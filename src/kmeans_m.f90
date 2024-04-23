@@ -8,7 +8,7 @@ module kmeans_m
 
     private
     public :: assign_points_to_centroids, update_centroids, compute_grid_difference, &
-              report_differences_in_grids
+              report_differences_in_grids, weighted_kmeans
 
 contains
 
@@ -226,6 +226,8 @@ contains
                 exit 
             endif
         enddo
+
+        ! TODO Return number of iterations used
 
     end subroutine weighted_kmeans
 
