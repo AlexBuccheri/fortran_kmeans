@@ -1,11 +1,12 @@
-program test_utils_m
+program test_grids_m
     use, intrinsic :: iso_fortran_env, only: dp => real64
 
     use fortuno_serial, only : execute_serial_cmd_app, is_equal, & 
        test => serial_case_item,&
        check => serial_check
 
-    use utils_m
+    use maths_m, only: all_close
+    use grids_m, only: generate_real_space_grid, linspace, linspace_to_grid, generate_gaussian
 
     implicit none
 
@@ -22,27 +23,6 @@ program test_utils_m
   
 contains
 
-    !> @brief Are \f$x\f$ and \f$y\f$ equal within a tolerance.
-    elemental logical function close(x, y, rtol, atol)
-        real(dp), intent(in) :: x, y
-        real(dp), optional, intent(in) :: rtol
-        real(dp), optional, intent(in) :: atol
-        real(dp) :: atol_, rtol_
-
-        if(present(rtol)) then
-            rtol_ = rtol
-        else
-            rtol_ = 1.e-5_dp
-        endif
-
-        if(present(atol)) then
-            atol_ = atol
-        else
-            atol_ = 1.e-8_dp
-        endif
-
-        close = abs(x - y) <= (atol_ + rtol_ * abs(y))
-    end function close
 
     subroutine test_generate_real_space_grid_1D
         integer      :: sampling(1)
@@ -56,7 +36,7 @@ contains
         ref_grid(1, :) = [0.25, 0.50, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00, 2.25, 2.50]
         call generate_real_space_grid(sampling, spacings, grid)
 
-        call check(all(close(grid, ref_grid)), msg="1D grid disagrees with reference")
+        call check(all_close(grid, ref_grid), msg="1D grid disagrees with reference")
 
     end subroutine test_generate_real_space_grid_1D
 
@@ -86,7 +66,7 @@ contains
         allocate(grid(2, n_total))
         call generate_real_space_grid(sampling, spacings, grid)
         call check(all(shape(grid) == [2, n_total]))
-        call check(all(close(grid, ref_grid)), msg="2D grid disagrees with reference")
+        call check(all_close(grid, ref_grid), msg="2D grid disagrees with reference")
 
     end subroutine test_generate_real_space_grid_2D
 
@@ -139,10 +119,10 @@ contains
         
         call check(all(shape(grid) == [3, n_total]))
 
-        call check(all(close(grid, ref_grid)), msg="3D grid disagrees with reference")
+        call check(all_close(grid, ref_grid), msg="3D grid disagrees with reference")
 
         i_centre = 14
-        call check(all(close(grid(:, i_centre), [0._dp, 0._dp, 0._dp])), msg="Grid centred on the origin")
+        call check(all_close(grid(:, i_centre), [0._dp, 0._dp, 0._dp]), msg="Grid centred on the origin")
    
     end subroutine test_generate_real_space_grid_3D
 
@@ -152,11 +132,11 @@ contains
 
         allocate(x(10))
         call linspace(1._dp, 10.0_dp, size(x), x, end_point=.true.)
-        call check(all(close(x, [1._dp, 2._dp, 3._dp, 4._dp, 5._dp, 6._dp, 7._dp, 8._dp, 9._dp, 10._dp])))
+        call check(all_close(x, [1._dp, 2._dp, 3._dp, 4._dp, 5._dp, 6._dp, 7._dp, 8._dp, 9._dp, 10._dp]))
 
         allocate(y(9))
         call linspace(1._dp, 10.0_dp, size(y), y, end_point=.false.)
-        call check(all(close(x, [1._dp, 2._dp, 3._dp, 4._dp, 5._dp, 6._dp, 7._dp, 8._dp, 9._dp])))
+        call check(all_close(y, [1._dp, 2._dp, 3._dp, 4._dp, 5._dp, 6._dp, 7._dp, 8._dp, 9._dp]))
 
     end subroutine test_linspace
 
@@ -198,11 +178,12 @@ contains
         call linspace(1._dp, 10.0_dp, size(y), y)
         call linspace_to_grid(x, y, grid)
 
-        call check(all(close(grid, ref_grid)))
+        call check(all_close(grid, ref_grid))
 
     end subroutine test_linspace_to_grid2d
 
 
+    ! TODO(Alex) Note, this is a demonstration that can be plot, but it does not assert anything
     subroutine test_generate_gaussian_2d
         real(dp), allocatable :: x(:), y(:), grid(:, :)
         real(dp), allocatable :: mean(:, :), sigma(:)
@@ -230,8 +211,6 @@ contains
             total_gaussian = total_gaussian + gaussian
         enddo
 
-        ! TODO(Alex) Note, this is a demonstration but it does not assert anything
-
         ! Output for gnuplot
         ! ir = 0
         ! do iy = 1 , ny
@@ -248,4 +227,4 @@ contains
     ! TODO(Alex) test_linspace_to_grid3d
 
 
-end program test_utils_m
+end program test_grids_m

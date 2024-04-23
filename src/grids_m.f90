@@ -1,17 +1,11 @@
-!> Utility routines
-module utils_m
+!> Grid routines
+module grids_m
     use, intrinsic :: iso_fortran_env
-
+    use omp_lib
     implicit none
     private
 
-    !> @brief Place-holder for MPI type
-    type, public :: mpi_t
-        integer :: comm  !< Communicator
-        integer :: rank  !< Process/rank
-        integer :: np    !< number of processes for this communicator
-    end type mpi_t
-
+    ! Exposed routines
     public :: generate_real_space_grid, linspace, linspace_to_grid, generate_gaussian
 
     interface linspace_to_grid
@@ -244,4 +238,4 @@ contains
 
     end subroutine generate_gaussian
 
-end module utils_m
+end module grids_m

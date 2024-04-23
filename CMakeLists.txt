@@ -64,26 +64,30 @@ option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 # Source code
 target_sources(lib_kmeans PRIVATE
        src/kmeans_m.f90
-       src/utils_m.f90
+       src/grids_m.f90
+       src/maths_m.f90
+       src/mpi_m.f90
        )
 
 # Library unit tests
 enable_testing()
 
-add_executable(test_utils tests/test_utils_m.f90)
-target_compile_options(test_utils PRIVATE ${GCC_DEBUG})
+# Grids module
+add_executable(test_grids tests/test_grids_m.f90)
+target_compile_options(test_grids PRIVATE ${GCC_DEBUG})
 
-target_link_libraries(test_utils PRIVATE lib_kmeans Fortuno::fortuno_serial)
-add_test(NAME test_generate_real_space_grid_1D COMMAND test_utils)
-add_test(NAME test_generate_real_space_grid_2D COMMAND test_utils)
-add_test(NAME test_generate_real_space_grid_3D COMMAND test_utils)
-add_test(NAME test_linspace COMMAND test_utils)
-add_test(NAME test_linspace_to_grid2d COMMAND test_utils)
-add_test(NAME test_generate_gaussian_2d COMMAND test_utils)
+target_link_libraries(test_grids PRIVATE lib_kmeans Fortuno::fortuno_serial)
+add_test(NAME test_generate_real_space_grid_1D COMMAND test_grids)
+# add_test(NAME test_generate_real_space_grid_2D COMMAND test_grids)
+# add_test(NAME test_generate_real_space_grid_3D COMMAND test_grids)
+# add_test(NAME test_linspace COMMAND test_grids)
+# add_test(NAME test_linspace_to_grid2d COMMAND test_grids)
+# add_test(NAME test_generate_gaussian_2d COMMAND test_grids)
 
-
+# k-means module
 add_executable(test_kmeans tests/test_kmeans_m.f90)
 target_compile_options(test_kmeans PRIVATE -g -fbacktrace -fcheck=all)
 
 target_link_libraries(test_kmeans PRIVATE lib_kmeans Fortuno::fortuno_serial Fortuno::fortuno_mpi) 
 add_test(NAME test_assign_points_to_centroids COMMAND test_kmeans)
+add_test(NAME test_update_centroids_no_movement COMMAND test_kmeans)
