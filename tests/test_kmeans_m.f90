@@ -89,32 +89,38 @@ contains
 
     subroutine test_update_centroids_no_movement()
         type(mpi_t) :: serial_comm
-        real(dp), allocatable :: grid(:, :), centroids(:, :)
+        real(dp), allocatable :: grid(:, :), centroids(:, :), uniform_weighting(:)
         integer,  allocatable :: clusters(:, :), cluster_sizes(:)
 
-        integer :: i
+        integer :: i, Nr
 
         ! Mocked comm
         serial_comm = mpi_t(1, 1, 1)
 
+        Nr = 8
         grid = reshape([[0, 0], [0, 1], [1, 0], [1, 1], &
-                        [2, 0], [3, 0], [2, 1], [3, 1]], [2, 8])
+                        [2, 0], [3, 0], [2, 1], [3, 1]], [2, Nr])
 
+        ! Place centroids such that the grid points are evenly distributed 
+        ! between the two of them
         centroids = reshape([[0.5, 0.5], &
                              [2.5, 0.5]], [2, 2])
 
         call assign_points_to_centroids(serial_comm, grid, centroids, clusters, cluster_sizes)
 
-        ! call check(all(cluster_sizes) == [4, 5, 9, 10, 14, 15, 19, 20, 24, 25]), &
-        !     msg='indices of points assigned to cluster 2')
+        call check(all(cluster_sizes == [4, 4]), msg='Each cluster gets half of the grid points')
+        call check(all(clusters(:, 1) == [1, 2, 3, 4]), msg='Each cluster gets half of the grid points')
+        call check(all(clusters(:, 2) == [5, 6, 7, 8]), msg='Each cluster gets half of the grid points')
 
-        write(*, *) cluster_sizes
-        write(*, *) clusters(:, 1)
-        write(*, *) clusters(:, 2)
-
-        ! do i = 1, 2
-        !     write(*, *) grid(i, :)
-        ! enddo
+        ! With a uniform weighting, the centroids should not change
+        allocate(uniform_weighting(Nr))
+        do i = 1, Nr
+            uniform_weighting(i) = 1._dp / real(Nr, dp)
+        enddo
+        
+        call update_centroids(grid, uniform_weighting, clusters, cluster_sizes, centroids)
+        call check(all_close(centroids(:, 1), [0.5_dp, 0.5_dp]))
+        call check(all_close(centroids(:, 2), [2.5_dp, 0.5_dp]))
 
     end subroutine test_update_centroids_no_movement
 
