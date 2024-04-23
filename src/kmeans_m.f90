@@ -93,6 +93,7 @@ contains
         do icen = 1, n_centroids
             numerator = 0._real64
             denominator = 0._real64
+            ! Iterate over all points in current centroid
             do j = 1, cluster_sizes(icen)
                 ir = clusters(j, icen)
                 numerator(:) = numerator(:) + (grid(:, ir) * weight(ir))
@@ -199,8 +200,76 @@ contains
    
     end subroutine report_differences_in_grids
 
-    ! !> @brief Weighted K-means clustering.
-    ! subroutine weighted_kmeans()
-    ! end subroutine weighted_kmeans
+
+    !> @brief Weighted K-means clustering.
+    !!
+    !! TODO(Alex) Add maths
+    subroutine weighted_kmeans(comm, grid, weight, centroids, n_iter, centroid_tol, verbose)
+        type(mpi_t),  intent(in) :: comm                         !< MPI instance
+        real(real64), intent(in) :: grid(:, :)                   !< Grid    (n_dim, n_points)
+        real(real64), intent(in) :: weight(:)                    !< Weights (n_points)
+        real(real64), intent(inout) :: centroids(:, :)           !< In: Initial centroids (n_dim, n_centroid)
+        !                                                           Out: Final centroids
+        integer,      optional, intent(in) :: n_iter             !< Optional max number of iterations
+        real(real64), optional, intent(in) :: centroid_tol       !< Optional convergence criterion
+        logical,      optional, intent(in) :: verbose            !< Verbosity
+  
+        logical          :: print_out
+        integer          :: n_iterations, nr, n_dim, n_centroid, i
+        real(real64)     :: tol
+
+        integer,      allocatable :: clusters(:, :), cluster_sizes(:)
+        real(real64), allocatable :: prior_centroids(:, :)
+        logical,      allocatable :: points_differ(:)
+
+        ! Optional arg assignment
+        n_iterations = 200
+        if (present(n_iter)) n_iterations = n_iter
+
+        tol = 1.e-6_real64
+        if (present(centroid_tol)) tol = centroid_tol
+
+        print_out = .false.
+        if (present(verbose)) print_out = verbose
+
+        nr = size(grid, 2)
+        n_dim = size(grid, 1)
+        n_centroid = size(centroids, 2)
+
+        ! Consistency checks
+        if (n_iterations < 1) then
+            write(*, *) 'n_iter must be > 0'
+            error stop 101
+        endif
+        if (size(weight) /= nr) then
+            write(*, *) 'Number of weights inconsistent with number of grid points'
+            error stop 102
+        endif
+        if (size(centroids, 1) /= n_dim) then
+            write(*, *) 'Centroids 1st dim inconsistent grid points 1st dim'
+            error stop 103
+        endif
+
+        ! Work arrays
+        allocate(prior_centroids(n_dim, size(centroids, 2)), source=centroids)
+        allocate(cluster_sizes(n_centroid))
+        allocate(clusters(n_dim, n_centroid))
+        allocate(points_differ(nr))
+
+        do i = 1, n_iterations
+            if (print_out) write(*, *) 'Iteration ', i
+            call assign_points_to_centroids(comm, grid, centroids, clusters, cluster_sizes)
+            call update_centroids(grid, weight, clusters, cluster_sizes, centroids)
+            call compute_grid_difference(prior_centroids, centroids, tol, points_differ)
+            if (any(points_differ)) then
+                if (print_out) call report_differences_in_grids(prior_centroids, centroids, tol, points_differ)
+                prior_centroids = centroids
+            else
+                ! Break loop - effectively exit routine
+                exit 
+            endif
+        enddo
+
+    end subroutine weighted_kmeans
 
 end module kmeans_m
