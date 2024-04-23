@@ -21,14 +21,10 @@ program test_kmeans_m
     implicit none
 
     ! Register tests
-    ! call execute_serial_cmd_app(testitems=[&
-    !         test("Assign points to centroids", test_assign_points_to_centroids), &
-    !         test("Update centroids - no change", test_update_centroids_no_movement), &
-    !         test("Difference in two sets of points", test_points_are_converged) &
-    !     ])
-  
     call execute_serial_cmd_app(testitems=[&
-            test("Assign points to centroids", test_points_are_converged) &
+            test("Assign points to centroids", test_assign_points_to_centroids),     &
+            test("Update centroids - no change", test_update_centroids_no_movement), &
+            test("Difference in two sets of points", test_points_are_converged)      &
         ])
 
 contains
@@ -130,6 +126,7 @@ contains
 
     end subroutine test_update_centroids_no_movement
 
+
     ! TODO(Alex) Add 1-2 more tests for updating centroid positions
 
 
@@ -137,9 +134,9 @@ contains
         real(dp) :: x(10), y(10)
         real(dp), allocatable :: grid(:, :), second_grid(:, :)
         logical, allocatable :: points_differ(:)
-        integer  :: ir, nr
+        integer  :: ir, nr, n_diff
         real(dp) :: tol, noise, random_num
-        logical  :: converged
+        logical  :: no_points_differ
 
         nr = 100
         tol = 1.e-6_dp
@@ -148,7 +145,8 @@ contains
         call linspace(1._dp, 10.0_dp, size(x), x)
         call linspace(1._dp, 10.0_dp, size(y), y)
         call linspace_to_grid(x, y, grid)
-    
+        allocate(points_differ(nr))
+
         ! All points within tolerance
         do ir = 1, nr
             ! random_num in [0, 1]
@@ -157,15 +155,19 @@ contains
             second_grid(:, ir) = grid(:, ir) + noise
         enddo
 
-        allocate(points_differ(nr))
         call compute_grid_difference(grid, second_grid, tol, points_differ)
-        if (any(points_differ)) then
-            call report_differences_in_grids(grid, second_grid, tol, points_differ)
-        endif
+        n_diff = count(points_differ .eqv. .true.)
+        call check(n_diff == 0, "No points should differ")
+        no_points_differ = all(points_differ .eqv. .false.)
+        call check(no_points_differ, "All points should be equivalent")
 
         ! One point not within tolerance
+        second_grid = grid
         second_grid(:, 1) = grid(:, 1) + 1.1_dp * tol
         call compute_grid_difference(grid, second_grid, tol, points_differ)
+        n_diff = count(points_differ .eqv. .true.)
+        call check(n_diff == 1, "Only one point should differ")
+        
         if (any(points_differ)) then
             call report_differences_in_grids(grid, second_grid, tol, points_differ)
         endif
