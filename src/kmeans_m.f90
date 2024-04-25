@@ -6,9 +6,9 @@ module kmeans_m
     use mpi_m, only: mpi_t
     implicit none
 
-    private
-    public :: assign_points_to_centroids, update_centroids, compute_grid_difference, &
-              report_differences_in_grids, weighted_kmeans
+    ! private
+    ! public :: assign_points_to_centroids, update_centroids, compute_grid_difference, &
+    !           report_differences_in_grids, weighted_kmeans
 
 contains
 
@@ -211,7 +211,7 @@ contains
         allocate(prior_centroids(n_dim, size(centroids, 2)), source=centroids)
         allocate(cluster_sizes(n_centroid))
         allocate(clusters(n_dim, n_centroid))
-        allocate(points_differ(nr))
+        allocate(points_differ(n_centroid))
 
         do i = 1, n_iterations
             if (print_out) write(*, *) 'Iteration ', i
@@ -222,8 +222,9 @@ contains
                 if (print_out) call report_differences_in_grids(prior_centroids, centroids, tol, points_differ)
                 prior_centroids = centroids
             else
-                ! Break loop - effectively exit routine
-                exit 
+                ! TODO Return number of iterations used
+                write(*, *) 'All points converged'
+                return 
             endif
         enddo
 
