@@ -16,6 +16,12 @@ One can also run each test binary manually:
 
 Fortuno is available [here](https://github.com/fortuno-repos/fortuno)
 
+### Build Issues
+
+* Unit tests for debug build all crash when building with `-ffpe-trap=invalid,zero,overflow,underflow` and/or
+  `-finit-real=nan`. This needs investigating. One assumes the issue is in the grid routines.
+
+
 ### Centroid Algorithm
 
 #### MPI Implementation
