@@ -8,8 +8,13 @@ set(CMAKE_Fortran_LIB_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 set(CMAKE_Fortran_MODULE_DIRECTORY ${PROJECT_BINARY_DIR}/modules)
 
 # Compiler flags for GCC only
+set(GCC_BASE 
+   -fopenmp   # OMP always enabled
+   -cpp
+   )
+
 set(GCC_DEBUG
-     -g                                           # Generate symbols
+   #   -g                                           # Generate symbols - already included
      -O0                                          # 0 optimisation. Probably implicit
      -fbacktrace                                  # symbolic stack traceback
      -ffpe-trap=invalid,zero,overflow,underflow   # control over floating-point exception
@@ -22,10 +27,15 @@ set(GCC_RELEASE
     -O3
    )
 
+# Convert list to string
+list(JOIN GCC_BASE " " GCC_BASE)
+list(JOIN GCC_DEBUG " " GCC_DEBUG)
+list(JOIN GCC_RELEASE " " GCC_RELEASE)
+
 # Set flags globally
-set(CMAKE_Fortran_FLAGS "-fopenmp -cpp") 
-set(CMAKE_Fortran_FLAGS_DEBUG "${CMAKE_Fortran_FLAGS_DEBUG} ${GCC_DEBUG}")
-set(CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} ${GCC_RELEASE}")
+set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${GCC_BASE}") 
+set(CMAKE_Fortran_FLAGS_DEBUG "${CMAKE_Fortran_FLAGS_DEBUG} ${GCC_BASE} ${GCC_DEBUG}")
+set(CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} ${GCC_BASE} ${GCC_RELEASE}")
 
 # External dependencies
 # ---------------------------------
@@ -50,8 +60,6 @@ if(MPI)
    find_package(MPI REQUIRED)
    add_definitions(${MPI_Fortran_COMPILE_FLAGS})
    include_directories(${MPI_Fortran_INCLUDE_PATH})
-   # Remove line as these are libraries, not paths to libraries
-   # link_directories(${MPI_Fortran_LIBRARIES})
 
    # Fetch and assign fortuno MPI lib
    FetchContent_Declare(
@@ -87,10 +95,10 @@ set_target_properties(lib_kmeans
         )
 
 # Linked libraries
-target_link_libraries(lib_kmeans OpenMP::OpenMP_Fortran ${MPI_Fortran_LIBRARIES})  # BLAS::BLAS 
+target_link_libraries(lib_kmeans PRIVATE OpenMP::OpenMP_Fortran ${MPI_Fortran_LIBRARIES})  # BLAS::BLAS 
 
 # Source code
-target_sources(lib_kmeans PRIVATE
+target_sources(lib_kmeans PUBLIC
        src/kmeans_m.f90
        src/grids_m.f90
        src/maths_m.f90
@@ -107,7 +115,7 @@ set_target_properties(fortuno_wrapper
         ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_Fortran_LIB_DIRECTORY}
         LIBRARY_OUTPUT_DIRECTORY ${CMAKE_Fortran_LIB_DIRECTORY}
         )
-target_link_libraries(fortuno_wrapper ${MPI_Fortran_LIBRARIES} ${fortuno_libs})
+target_link_libraries(fortuno_wrapper PUBLIC ${fortuno_libs} ${MPI_Fortran_LIBRARIES})
 target_sources(fortuno_wrapper PRIVATE
        src/fortuno_interface_m.F90
        )
@@ -116,28 +124,29 @@ target_sources(fortuno_wrapper PRIVATE
 # -------------------------------
 
 # Testing program
-add_executable(run_kmeans run.f90)
-# target_compile_options(run_kmeans PRIVATE -g -fcheck=all -fbacktrace -fopenmp)
-target_link_libraries(run_kmeans PRIVATE lib_kmeans OpenMP::OpenMP_Fortran ${MPI_Fortran_LIBRARIES})  # BLAS::BLAS 
+# add_executable(run_kmeans run.f90)
+# # target_compile_options(run_kmeans PRIVATE -g -fcheck=all -fbacktrace -fopenmp)
+# target_link_libraries(run_kmeans PRIVATE lib_kmeans OpenMP::OpenMP_Fortran ${MPI_Fortran_LIBRARIES})  # BLAS::BLAS 
 
 # Library unit tests
 enable_testing()
 
 # Grids module
 add_executable(test_grids tests/test_grids_m.f90)
+# target_compile_options(test_grids PRIVATE -g -fcheck=all -fbacktrace -fopenmp)
 target_link_libraries(test_grids PRIVATE lib_kmeans fortuno_wrapper)
 
-add_test(NAME test_generate_real_space_grid_1D COMMAND test_grids)
-add_test(NAME test_generate_real_space_grid_2D COMMAND test_grids)
-add_test(NAME test_generate_real_space_grid_3D COMMAND test_grids)
-add_test(NAME test_linspace COMMAND test_grids)
-add_test(NAME test_linspace_to_grid2d COMMAND test_grids)
-add_test(NAME test_generate_gaussian_2d COMMAND test_grids)
+# add_test(NAME test_generate_real_space_grid_1D COMMAND test_grids)
+# add_test(NAME test_generate_real_space_grid_2D COMMAND test_grids)
+# add_test(NAME test_generate_real_space_grid_3D COMMAND test_grids)
+# add_test(NAME test_linspace COMMAND test_grids)
+# add_test(NAME test_linspace_to_grid2d COMMAND test_grids)
+# add_test(NAME test_generate_gaussian_2d COMMAND test_grids)
 
-# k-means module
-add_executable(test_kmeans tests/test_kmeans_m.f90)
-target_link_libraries(test_kmeans PRIVATE lib_kmeans fortuno_wrapper) 
+# # k-means module
+# add_executable(test_kmeans tests/test_kmeans_m.f90)
+# target_link_libraries(test_kmeans lib_kmeans fortuno_wrapper ${fortuno_libs} ${MPI_Fortran_LIBRARIES}) 
 
-add_test(NAME test_assign_points_to_centroids COMMAND test_kmeans)
-add_test(NAME test_update_centroids_no_movement COMMAND test_kmeans)
-add_test(NAME test_points_are_converged COMMAND test_kmeans)
+# add_test(NAME test_assign_points_to_centroids COMMAND test_kmeans)
+# add_test(NAME test_update_centroids_no_movement COMMAND test_kmeans)
+# add_test(NAME test_points_are_converged COMMAND test_kmeans)

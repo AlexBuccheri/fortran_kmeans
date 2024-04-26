@@ -6,6 +6,7 @@ program test_grids_m
     !    test => serial_case_item,&
     !    check => serial_check
 
+    use omp_lib
     use fortuno_interface_m, only: execute_cmd_app, test, check, is_equal
     use maths_m, only: all_close
     use grids_m, only: generate_real_space_grid, linspace, linspace_to_grid, generate_gaussian
