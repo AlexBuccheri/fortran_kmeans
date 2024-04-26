@@ -178,8 +178,7 @@ contains
     !> @brief Weighted K-means clustering.
     !!
     !! TODO(Alex) Add maths
-    subroutine weighted_kmeans(comm, grid, weight, centroids, n_iter, centroid_tol, verbose)
-        type(mpi_t),  intent(in) :: comm                         !< MPI instance
+    subroutine weighted_kmeans(grid, weight, centroids, n_iter, centroid_tol, verbose)
         real(real64), intent(in) :: grid(:, :)                   !< Grid    (n_dim, n_points)
         real(real64), intent(in) :: weight(:)                    !< Weights (n_points)
         real(real64), intent(inout) :: centroids(:, :)           !< In: Initial centroids (n_dim, n_centroid)

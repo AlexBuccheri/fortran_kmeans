@@ -7,23 +7,30 @@ set(CMAKE_Fortran_BIN_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 set(CMAKE_Fortran_LIB_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 set(CMAKE_Fortran_MODULE_DIRECTORY ${PROJECT_BINARY_DIR}/modules)
 
-# Compiler flags
+# Compiler flags for GCC only
 set(GCC_DEBUG
      -g                                           # Generate symbols
+     -O0                                          # 0 optimisation. Probably implicit
      -fbacktrace                                  # symbolic stack traceback
      -ffpe-trap=invalid,zero,overflow,underflow   # control over floating-point exception
      -finit-real=nan                              #  All real scalars are initialised to NaN
      -fcheck=all                                  # Enable all run-time test of -fcheck: array-temps, bits, bounds, do, mem, pointer, recursion
+     -Wall                                        # Enable all warnings
     )
 
+set(GCC_RELEASE
+    -O3
+   )
+
+# Set flags globally
+set(CMAKE_Fortran_FLAGS "-fopenmp -cpp") 
+set(CMAKE_Fortran_FLAGS_DEBUG "${CMAKE_Fortran_FLAGS_DEBUG} ${GCC_DEBUG}")
+set(CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} ${GCC_RELEASE}")
+
 # External dependencies
+# ---------------------------------
 find_package(BLAS REQUIRED)
 find_package(OpenMP REQUIRED)
-find_package(MPI REQUIRED)
-
-add_definitions(${MPI_Fortran_COMPILE_FLAGS})
-include_directories(${MPI_Fortran_INCLUDE_PATH})
-link_directories(${MPI_Fortran_LIBRARIES})
 
 # Fortuno unit testing framework
 include(FetchContent)
@@ -33,15 +40,37 @@ FetchContent_Declare(
   GIT_REPOSITORY "https://github.com/fortuno-repos/fortuno"
   GIT_TAG "main"
 )
-FetchContent_Declare(
-  FortunoMPI
-  GIT_REPOSITORY "https://github.com/fortuno-repos/fortuno-mpi"
-  GIT_TAG "main"
-)
 FetchContent_MakeAvailable(Fortuno)
-FetchContent_MakeAvailable(FortunoMPI)
+set(fortuno_libs Fortuno::fortuno_serial)
+
+# MPI-dependent settings
+option(MPI "Use MPI" ON)
+if(MPI)
+   # Find MPI library and headers
+   find_package(MPI REQUIRED)
+   add_definitions(${MPI_Fortran_COMPILE_FLAGS})
+   include_directories(${MPI_Fortran_INCLUDE_PATH})
+   link_directories(${MPI_Fortran_LIBRARIES})
+
+   # Fetch and assign fortuno MPI lib
+   FetchContent_Declare(
+     FortunoMPI
+     GIT_REPOSITORY "https://github.com/fortuno-repos/fortuno-mpi"
+     GIT_TAG "main"
+   )
+   FetchContent_MakeAvailable(FortunoMPI)
+   list(APPEND fortuno_libs Fortuno::fortuno_mpi)
+
+   # Set preprocessor variable 
+   add_compile_definitions(USE_MPI=1)
+
+else()
+   set(MPI_Fortran_LIBRARIES "")
+   add_compile_definitions(USE_MPI=0)
+endif()
 
 # This library
+# -----------------------------
 add_library(lib_kmeans "")
 
 set_target_properties(lib_kmeans
@@ -53,11 +82,8 @@ set_target_properties(lib_kmeans
         LIBRARY_OUTPUT_DIRECTORY ${CMAKE_Fortran_LIB_DIRECTORY}
         )
 
-# Flags
-target_compile_options(lib_kmeans PRIVATE -fopenmp)
-
 # Linked libraries
-target_link_libraries(lib_kmeans BLAS::BLAS OpenMP::OpenMP_Fortran ${MPI_Fortran_LIBRARIES})
+target_link_libraries(lib_kmeans OpenMP::OpenMP_Fortran ${MPI_Fortran_LIBRARIES})  # BLAS::BLAS 
 
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 
@@ -69,26 +95,32 @@ target_sources(lib_kmeans PRIVATE
        src/mpi_m.f90
        )
 
+# Testing
+# -------------------------------
+
+# Testing program
+add_executable(run_kmeans run.f90)
+# target_compile_options(run_kmeans PRIVATE -g -fcheck=all -fbacktrace -fopenmp)
+target_link_libraries(run_kmeans PRIVATE lib_kmeans OpenMP::OpenMP_Fortran ${MPI_Fortran_LIBRARIES})  # BLAS::BLAS 
+
 # Library unit tests
 enable_testing()
 
 # Grids module
 add_executable(test_grids tests/test_grids_m.f90)
-target_compile_options(test_grids PRIVATE ${GCC_DEBUG})
-
 target_link_libraries(test_grids PRIVATE lib_kmeans Fortuno::fortuno_serial)
+
 add_test(NAME test_generate_real_space_grid_1D COMMAND test_grids)
-# add_test(NAME test_generate_real_space_grid_2D COMMAND test_grids)
-# add_test(NAME test_generate_real_space_grid_3D COMMAND test_grids)
-# add_test(NAME test_linspace COMMAND test_grids)
-# add_test(NAME test_linspace_to_grid2d COMMAND test_grids)
-# add_test(NAME test_generate_gaussian_2d COMMAND test_grids)
+add_test(NAME test_generate_real_space_grid_2D COMMAND test_grids)
+add_test(NAME test_generate_real_space_grid_3D COMMAND test_grids)
+add_test(NAME test_linspace COMMAND test_grids)
+add_test(NAME test_linspace_to_grid2d COMMAND test_grids)
+add_test(NAME test_generate_gaussian_2d COMMAND test_grids)
 
 # k-means module
 add_executable(test_kmeans tests/test_kmeans_m.f90)
-target_compile_options(test_kmeans PRIVATE -g -fbacktrace -fcheck=all)
+target_link_libraries(test_kmeans PRIVATE lib_kmeans ${fortuno_libs}) 
 
-target_link_libraries(test_kmeans PRIVATE lib_kmeans Fortuno::fortuno_serial Fortuno::fortuno_mpi) 
 add_test(NAME test_assign_points_to_centroids COMMAND test_kmeans)
 add_test(NAME test_update_centroids_no_movement COMMAND test_kmeans)
 add_test(NAME test_points_are_converged COMMAND test_kmeans)

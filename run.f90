@@ -5,7 +5,6 @@
 program run
     use, intrinsic :: iso_fortran_env, only: dp => real64
 
-    use mpi_m,    only: mpi_t
     use grids_m,  only: linspace, linspace_to_grid
     use kmeans_m, only: weighted_kmeans
     implicit none
@@ -16,9 +15,6 @@ program run
     character(len=100) :: root = "/Users/alexanderbuccheri/Codes/kmeans/"
     character(len=200) :: file
     integer :: fid
-
-    ! MPI
-    type(mpi_t) :: serial_comm
 
     ! Grid
     integer,  parameter  :: n_dim = 2        !< Hard-coded to 2D
@@ -72,10 +68,9 @@ program run
     enddo
     close(fid)
 
-    serial_comm = mpi_t(1, 1, 1)
     niter = 50
     verbose = .true.
-    call weighted_kmeans(serial_comm, grid, weight, centroids, n_iter=niter, verbose=verbose)
+    call weighted_kmeans(grid, weight, centroids, n_iter=niter, verbose=verbose)
 
     ! Output final centroids
     file = trim(adjustl(root)) // "jupyter/final_centroids.dat"

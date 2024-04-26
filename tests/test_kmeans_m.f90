@@ -6,12 +6,11 @@ program test_kmeans_m
     use fortuno_serial, only : execute_serial_cmd_app, is_equal, & 
        test => serial_case_item,&
        check => serial_check
-    use fortuno_mpi, only : as_char, global_comm  !, is_equal, 
+    ! use fortuno_mpi, only : as_char, global_comm  !, is_equal, 
     !    test => mpi_case_item,&
     !    & check => mpi_check, test_item, this_rank
 
     ! Required modules
-    use mpi_m,   only: mpi_t   
     use grids_m, only: linspace, linspace_to_grid, generate_gaussian
     use maths_m, only: all_close
 
@@ -31,7 +30,6 @@ program test_kmeans_m
 contains
 
     subroutine test_assign_points_to_centroids
-        type(mpi_t) :: serial_comm
         ! Grid
         integer, parameter    :: n_dims = 2
         integer               :: nx, ny
@@ -43,10 +41,7 @@ contains
         integer                :: n_centroids
         integer,  allocatable  :: clusters(:, :), cluster_sizes(:)
 
-        integer :: ic, ir, ig
-
-        ! Inputs
-        serial_comm = mpi_t(1, 1, 1)
+        integer :: ic, ir, ig, ierr
 
         ! 2D Grid
         nx = 5
@@ -61,7 +56,7 @@ contains
         centroids = reshape([2._dp, 3._dp, &  ! centroid 1
                              4._dp, 3._dp],&  ! centroid 2
                             [n_dims, n_centroids])
-        call assign_points_to_centroids(serial_comm, grid, centroids, clusters, cluster_sizes)
+        call assign_points_to_centroids(grid, centroids, clusters, cluster_sizes)
 
         ! Central 5 points are equidistant from the centroids. In the case that >=2 values are the same, 
         ! minloc appears to return the first instance
@@ -90,14 +85,10 @@ contains
 
 
     subroutine test_update_centroids_no_movement()
-        type(mpi_t) :: serial_comm
         real(dp), allocatable :: grid(:, :), centroids(:, :), uniform_weighting(:)
         integer,  allocatable :: clusters(:, :), cluster_sizes(:)
 
         integer :: i, Nr
-
-        ! Mocked comm
-        serial_comm = mpi_t(1, 1, 1)
 
         Nr = 8
         grid = reshape([[0, 0], [0, 1], [1, 0], [1, 1], &
@@ -108,7 +99,7 @@ contains
         centroids = reshape([[0.5, 0.5], &
                              [2.5, 0.5]], [2, 2])
 
-        call assign_points_to_centroids(serial_comm, grid, centroids, clusters, cluster_sizes)
+        call assign_points_to_centroids(grid, centroids, clusters, cluster_sizes)
 
         call check(all(cluster_sizes == [4, 4]), msg='Each cluster gets half of the grid points')
         call check(all(clusters(:, 1) == [1, 2, 3, 4]), msg='Each cluster gets half of the grid points')
@@ -252,8 +243,6 @@ contains
 
 
     subroutine test_weighted_kmeans()
-        ! MPI
-        type(mpi_t) :: serial_comm
         ! Grid
         integer,  parameter  :: n_dim = 2
         integer              :: nr
@@ -268,12 +257,9 @@ contains
         integer,  allocatable :: indices(:)
         real(dp), allocatable :: centroids(:, :)
 
-        integer :: ix, iy, ir, n_iter, i, n_centroid
+        integer :: ix, iy, ir, n_iter, i, n_centroid, ierr
         logical :: verbose
         integer, parameter :: seed = 20180815
-
-        ! Mocked comm
-        serial_comm = mpi_t(1, 1, 1)
 
         ! Grid
         sampling = [50, 50]
@@ -321,7 +307,7 @@ contains
             write(101, *) grid(:, ir), 0._dp
         enddo
     
-        call weighted_kmeans(serial_comm, grid, total_gaussian, centroids, n_iter, verbose=verbose)
+        call weighted_kmeans(grid, total_gaussian, centroids, n_iter, verbose=verbose)
 
         ! Output final centroids for plotting over Gaussians
         do i = 1, n_centroid
