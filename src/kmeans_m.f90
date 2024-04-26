@@ -10,6 +10,10 @@ module kmeans_m
     public :: assign_points_to_centroids, update_centroids, compute_grid_difference, &
               report_differences_in_grids, weighted_kmeans
 
+    interface update_centroids
+        module procedure :: update_centroids_serial, update_centroids_mpi
+    end interface
+
 contains
 
     !> @brief Assign each grid point to the closest centroid. 
@@ -65,8 +69,8 @@ contains
     end subroutine assign_points_to_centroids
     
 
-    !> @bried Compute a new set of centroids.
-    subroutine update_centroids(grid, weight, clusters, cluster_sizes, centroids)
+    !> @brief Compute a new set of centroids.
+    subroutine update_centroids_serial(grid, weight, clusters, cluster_sizes, centroids)
         real(real64), intent(in)    :: grid(:, :)               !< Real-space grid (n_dims, N)
         real(real64), intent(in)    :: weight(:)                !< Weights (N)
         integer,      intent(in)    :: clusters(:, :)           !< Cluster assignment for each grid point (max_cpoints, Ncentroids)
@@ -119,15 +123,49 @@ contains
         ! enddo
         ! !$omp end parallel
 
-    end subroutine update_centroids
+    end subroutine update_centroids_serial
+
+
+    !> @brief Compute a new set of centroids.
+    subroutine update_centroids_mpi(comm, grid, weight, clusters, cluster_sizes, centroids)
+        type(mpi_t),  intent(inout) :: comm
+        real(real64), intent(in)    :: grid(:, :)               !< Real-space grid (n_dims, N)
+        real(real64), intent(in)    :: weight(:)                !< Weights (N)
+        integer,      intent(in)    :: clusters(:, :)           !< Cluster assignment for each grid point (max_cpoints, Ncentroids)
+        integer,      intent(in)    :: cluster_sizes(:)         !< Keep track of the number of points assigned to each cluster
+        
+        real(real64), intent(inout) :: centroids(:, :)          !< In: centroid positions (n_dims, Ncentroids)
+        !                                                         Out: Updated centroid positions
+        
+        integer                   :: n_dims, n_centroids, icen, j, ir
+        real(real64), allocatable :: numerator(:), local_centroid(:)
+        real(real64)              :: denominator
+
+        n_dims = size(grid, 1)
+        n_centroids = size(cluster_sizes)
+        allocate(numerator(n_dims))
+
+        do icen = 1, n_centroids
+            numerator = 0._real64
+            denominator = 0._real64
+            ! Iterate over all points in current centroid
+            do j = 1, cluster_sizes(icen)
+                ir = clusters(j, icen)
+                numerator(:) = numerator(:) + (grid(:, ir) * weight(ir))
+                denominator = denominator + weight(ir)
+            enddo
+            centroids(:, icen) = numerator(:) / denominator
+        enddo
+
+    end subroutine update_centroids_mpi
 
 
     ! TODO(Alex) Document exactly what this is computing/returning
     subroutine compute_grid_difference(points, updated_points, tol, points_differ)
-        real(real64), intent(in)  :: points(:, :)      !< Real-space grids (n_dims, N)
-        real(real64), intent(in)  :: updated_points(:, :)
-        real(real64), intent(in)  :: tol
-        logical,      intent(out) :: points_differ(:)     !< |a_i - b_i|
+        real(real64), intent(in)    :: points(:, :)      !< Real-space grids (n_dims, N)
+        real(real64), intent(in)    :: updated_points(:, :)
+        real(real64), intent(in)    :: tol
+        logical,      intent(out)   :: points_differ(:)     !< |a_i - b_i|
        
         integer      ::  i, n_dim
         real(real64), allocatable :: diff(:)
