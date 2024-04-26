@@ -14,11 +14,10 @@ set(GCC_BASE
    )
 
 set(GCC_DEBUG
-   #   -g                                           # Generate symbols - already included
      -O0                                          # 0 optimisation. Probably implicit
      -fbacktrace                                  # symbolic stack traceback
-     -ffpe-trap=invalid,zero,overflow,underflow   # control over floating-point exception
-     -finit-real=nan                              # All real scalars are initialised to NaN
+   #   -ffpe-trap=invalid,zero,overflow,underflow   # control over floating-point exception
+   #   -finit-real=nan                              # All real scalars are initialised to NaN
      -fcheck=all                                  # Enable all run-time test of -fcheck: array-temps, bits, bounds, do, mem, pointer, recursion
      -Wall                                        # Enable all warnings
     )
@@ -39,7 +38,7 @@ set(CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} ${GCC_BASE} ${GC
 
 # External dependencies
 # ---------------------------------
-find_package(BLAS REQUIRED)
+find_package(BLAS REQUIRED)    # Link with BLAS::BLAS
 find_package(OpenMP REQUIRED)
 
 # Fortuno unit testing framework
@@ -124,29 +123,25 @@ target_sources(fortuno_wrapper PRIVATE
 # -------------------------------
 
 # Testing program
-# add_executable(run_kmeans run.f90)
-# # target_compile_options(run_kmeans PRIVATE -g -fcheck=all -fbacktrace -fopenmp)
-# target_link_libraries(run_kmeans PRIVATE lib_kmeans OpenMP::OpenMP_Fortran ${MPI_Fortran_LIBRARIES})  # BLAS::BLAS 
+add_executable(run_kmeans run.f90)
+target_link_libraries(run_kmeans PRIVATE lib_kmeans OpenMP::OpenMP_Fortran ${MPI_Fortran_LIBRARIES}) 
 
 # Library unit tests
 enable_testing()
 
 # Grids module
 add_executable(test_grids tests/test_grids_m.f90)
-# target_compile_options(test_grids PRIVATE -g -fcheck=all -fbacktrace -fopenmp)
 target_link_libraries(test_grids PRIVATE lib_kmeans fortuno_wrapper)
+add_test(NAME test_generate_real_space_grid_1D COMMAND test_grids)
+add_test(NAME test_generate_real_space_grid_2D COMMAND test_grids)
+add_test(NAME test_generate_real_space_grid_3D COMMAND test_grids)
+add_test(NAME test_linspace COMMAND test_grids)
+add_test(NAME test_linspace_to_grid2d COMMAND test_grids)
+add_test(NAME test_generate_gaussian_2d COMMAND test_grids)
 
-# add_test(NAME test_generate_real_space_grid_1D COMMAND test_grids)
-# add_test(NAME test_generate_real_space_grid_2D COMMAND test_grids)
-# add_test(NAME test_generate_real_space_grid_3D COMMAND test_grids)
-# add_test(NAME test_linspace COMMAND test_grids)
-# add_test(NAME test_linspace_to_grid2d COMMAND test_grids)
-# add_test(NAME test_generate_gaussian_2d COMMAND test_grids)
-
-# # k-means module
-# add_executable(test_kmeans tests/test_kmeans_m.f90)
-# target_link_libraries(test_kmeans lib_kmeans fortuno_wrapper ${fortuno_libs} ${MPI_Fortran_LIBRARIES}) 
-
-# add_test(NAME test_assign_points_to_centroids COMMAND test_kmeans)
-# add_test(NAME test_update_centroids_no_movement COMMAND test_kmeans)
-# add_test(NAME test_points_are_converged COMMAND test_kmeans)
+# k-means module
+add_executable(test_kmeans tests/test_kmeans_m.f90)
+target_link_libraries(test_kmeans PRIVATE lib_kmeans fortuno_wrapper) 
+add_test(NAME test_assign_points_to_centroids COMMAND test_kmeans)
+add_test(NAME test_update_centroids_no_movement COMMAND test_kmeans)
+add_test(NAME test_points_are_converged COMMAND test_kmeans)
