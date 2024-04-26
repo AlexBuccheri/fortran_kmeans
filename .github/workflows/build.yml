@@ -42,8 +42,8 @@ jobs:
       - name: Install Python Packages
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          # Install dependencies, rather than optional dependencies
-          python -m pip install .
+          # Install from requirements as there is not a python project present
+          pip install -r requirements.txt
 
       - name: Set Compiler
         run: |
