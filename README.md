@@ -16,20 +16,20 @@ One can also run each test binary manually:
 
 Fortuno is available [here](https://github.com/fortuno-repos/fortuno)
 
-## TODOs
+### Centroid Algorithm
 
-### Centroid algorithm
+#### MPI Implementation
 
-* Add MPI distribution routine and test `assign_points_to_centroids` with
-  distribution of outer loop
-  * Add routine to distribute loops
-  * I'm not happy with the first pass implementation
-  * `norm2` should *probably* be replaced
-  * Evaluate the use of OMP
-* Implement routine `update_centroids`
-* Implement function `points_are_converged`
-* Implement routine `weighted_kmeans`, which calls those above
-* Test on the Gaussian distribution demonstrated by `test_generate_gaussian_2d` in `test_utils.f90`
+In the MPI implementation, `assign_points_to_centroids` does not change. All centroids are defined on all processes.
+Instead, `assign_points_to_centroids` expects a grid or sub-grid, local to a process. It returns `cluster_sizes` and `clusters`,
+which assign all points of the sub-grid to clusters.
+
+`update_centroids` also remains the same. It returns `centroids` of shape `(n_dim, n_centroids)`, which have only been computed
+using a local set of grid points. The MPI overload of this routine `allreduce`s the centroids(n_dim, n_centroids), such that the
+final centroids contain contributions from all grid points, over all processes. `centroids` are now complete on all processes.
+
+#### TODOs
+
 * Implement "kmeans++" to find initial weights - see my python reference v
   * Extend to "greedy kmeans++"
 

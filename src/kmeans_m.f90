@@ -6,9 +6,9 @@ module kmeans_m
     use mpi_m, only: mpi_t
     implicit none
 
-    ! private
-    ! public :: assign_points_to_centroids, update_centroids, compute_grid_difference, &
-    !           report_differences_in_grids, weighted_kmeans
+    private
+    public :: assign_points_to_centroids, update_centroids, compute_grid_difference, &
+              report_differences_in_grids, weighted_kmeans
 
 contains
 
@@ -17,8 +17,7 @@ contains
     !!
     !! TODOs
     !!  * Add maths
-    !!  * Look at replacing norm2 call - needs to be efficient to operate on n_points
-    !!  * Extend to OMP? NOTE: Inner loop DOES NOT lend itself to OMP if the region is instantiated before outer loop
+    !!  * Consider extending centroids loop to OMP
     !!
     subroutine assign_points_to_centroids(comm, grid_points, centroids, clusters, cluster_sizes)
         type(mpi_t),  intent(in) :: comm                            !< MPI instance
