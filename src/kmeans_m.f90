@@ -17,10 +17,8 @@ contains
     !!
     !! TODOs
     !!  * Add maths
-    !!  * Consider extending centroids loop to OMP
     !!
-    subroutine assign_points_to_centroids(comm, grid_points, centroids, clusters, cluster_sizes)
-        type(mpi_t),  intent(in) :: comm                            !< MPI instance
+    subroutine assign_points_to_centroids(grid_points, centroids, clusters, cluster_sizes)
         real(real64), intent(in) :: grid_points(:, :)               !< Real-space grid (n_dims, N)
         real(real64), intent(in) :: centroids(:, :)                 !< Centroid positions (n_dims, Ncentroids)
         integer,      intent(out), allocatable :: clusters(:, :)    !< Cluster assignment for each grid point (Ncentroids, max_cpoints)
@@ -78,14 +76,13 @@ contains
         !                                                         Out: Updated centroid positions
         
         integer                   :: n_dims, n_centroids, icen, j, ir
-        real(real64), allocatable :: numerator(:)
+        real(real64), allocatable :: numerator(:), local_centroid(:)
         real(real64)              :: denominator
 
         n_dims = size(grid, 1)
         n_centroids = size(cluster_sizes)
         allocate(numerator(n_dims))
 
-        ! TODO Make OMP
         do icen = 1, n_centroids
             numerator = 0._real64
             denominator = 0._real64
@@ -97,6 +94,30 @@ contains
             enddo
             centroids(:, icen) = numerator(:) / denominator
         enddo
+
+        ! Causes the regression test to crash, and I can't see what the problem is
+        ! allocate(local_centroid(n_dims))
+        ! !$omp parallel default(shared) private(numerator, denominator) shared(local_centroid, centroids)
+        ! do icen = 1, n_centroids
+        !     numerator = 0._real64
+        !     denominator = 0._real64
+
+        !     ! Iterate over all points in current centroid
+        !     !$omp do private(ir)
+        !     do j = 1, cluster_sizes(icen)
+        !         ir = clusters(j, icen)
+        !         numerator(:) = numerator(:) + (grid(:, ir) * weight(ir))
+        !         denominator = denominator + weight(ir)
+        !     enddo
+        !     !$omp end do
+
+        !     !$OMP CRITICAL
+        !         local_centroid(:) = local_centroid(:) + (numerator(:) / denominator)
+        !         centroids(:, icen) = local_centroid(:)
+        !     !$OMP END CRITICAL
+    
+        ! enddo
+        ! !$omp end parallel
 
     end subroutine update_centroids
 
@@ -211,7 +232,7 @@ contains
 
         do i = 1, n_iterations
             if (print_out) write(*, *) 'Iteration ', i
-            call assign_points_to_centroids(comm, grid, centroids, clusters, cluster_sizes)
+            call assign_points_to_centroids(grid, centroids, clusters, cluster_sizes)
             call update_centroids(grid, weight, clusters, cluster_sizes, centroids)
             call compute_grid_difference(prior_centroids, centroids, tol, points_differ)
             if (any(points_differ)) then
