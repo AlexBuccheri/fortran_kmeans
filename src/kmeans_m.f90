@@ -33,8 +33,7 @@ contains
         integer :: n_centroids                             !< Number of  centroids
         integer :: max_cpoints                             !< Upper bound for number of points per centroid
 
-        real(real64), allocatable :: displacements(:, :)   !< Displacements between centroids and grid point i
-        real(real64), allocatable :: dmatrix(:)            !< Distance matrix
+        real(real64), allocatable :: dmatrix(:)            !< Distance matrix |r_ic - r_ir|
         integer,      allocatable :: work_clusters(:, :)   !< Work array for cluster assignment for each grid point (Ncentroids, upper_bound)
 
         n_dims = size(grid_points, 1)
@@ -42,21 +41,19 @@ contains
         n_points = size(grid_points, 2)
 
         ! We don't know how many points will be assigned per cluster
-        ! Assuming a uniform distribution, one expects ~ N / Ncentroids
+        ! Assuming a uniform distribution, one expects ~ n_points / n_centroids
         ! Allocate a conservative upper bound (could replace with linked list)
         max_cpoints = int(3 * n_points / n_centroids)
         allocate(cluster_sizes(n_centroids), source=0)
 
         ! Work arrays
         allocate(work_clusters(max_cpoints, n_centroids))
-        allocate(displacements(n_dims, n_centroids))
         allocate(dmatrix(n_centroids))
 
         do ir = 1, n_points
             do ic = 1, n_centroids
-                displacements(:, ic) = centroids(:, ic) - grid_points(:, ir)
+                dmatrix(ic) =  norm2(centroids(:, ic) - grid_points(:, ir))
             enddo
-            dmatrix = norm2(displacements, dim=1)
             icen = minloc(dmatrix, dim=1)
             ! Track increasing size of each cluster (also acts as an index)
             cluster_sizes(icen) = cluster_sizes(icen) + 1
