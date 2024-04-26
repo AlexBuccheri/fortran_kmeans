@@ -1,18 +1,14 @@
 program test_kmeans_m
     use, intrinsic :: iso_fortran_env, only: dp => real64
     
-    ! TODO Overload serial and mpi versions
-    ! Test framework
-    use fortuno_serial, only : execute_serial_cmd_app, is_equal, & 
-       test => serial_case_item,&
-       check => serial_check
-    ! use fortuno_mpi, only : as_char, global_comm  !, is_equal, 
-    !    test => mpi_case_item,&
-    !    & check => mpi_check, test_item, this_rank
+    ! Get via wrapper
+    ! use fortuno_serial, only : execute_serial_cmd_app, is_equal, & 
+    !    test => serial_case_item,&
+    !    check => serial_check
 
-    ! Required modules
-    use grids_m, only: linspace, linspace_to_grid, generate_gaussian
-    use maths_m, only: all_close
+    use fortuno_interface_m, only: execute_cmd_app, test, check, is_equal
+    use grids_m,             only: linspace, linspace_to_grid, generate_gaussian
+    use maths_m,             only: all_close
 
     ! Module under test
     use kmeans_m, only : assign_points_to_centroids, update_centroids, compute_grid_difference, & 
@@ -20,7 +16,7 @@ program test_kmeans_m
     implicit none
 
     ! Register tests
-    call execute_serial_cmd_app(testitems=[&
+    call execute_cmd_app(testitems=[&
             test("Assign points to centroids", test_assign_points_to_centroids),     &
             test("Update centroids - no change", test_update_centroids_no_movement), &
             test("Difference in two sets of points", test_points_are_converged),     &  

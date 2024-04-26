@@ -1,10 +1,12 @@
 program test_grids_m
     use, intrinsic :: iso_fortran_env, only: dp => real64
 
-    use fortuno_serial, only : execute_serial_cmd_app, is_equal, & 
-       test => serial_case_item,&
-       check => serial_check
+    ! Get via wrapper
+    ! use fortuno_serial, only : execute_serial_cmd_app, is_equal, & 
+    !    test => serial_case_item,&
+    !    check => serial_check
 
+    use fortuno_interface_m, only: execute_cmd_app, test, check, is_equal
     use maths_m, only: all_close
     use grids_m, only: generate_real_space_grid, linspace, linspace_to_grid, generate_gaussian
 
@@ -12,7 +14,7 @@ program test_grids_m
 
     ! Register tests by providing name and subroutine to run for each test.
     ! Note: this routine does not return but stops the program with the right exit code.
-    call execute_serial_cmd_app(testitems=[&
+    call execute_cmd_app(testitems=[&
             test("Real-space 1D grid", test_generate_real_space_grid_1D), &
             test("Real-space 2D grid", test_generate_real_space_grid_2D), &
             test("Real-space 3D grid", test_generate_real_space_grid_3D), &

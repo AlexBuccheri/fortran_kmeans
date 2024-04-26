@@ -13,7 +13,7 @@ set(GCC_DEBUG
      -O0                                          # 0 optimisation. Probably implicit
      -fbacktrace                                  # symbolic stack traceback
      -ffpe-trap=invalid,zero,overflow,underflow   # control over floating-point exception
-     -finit-real=nan                              #  All real scalars are initialised to NaN
+     -finit-real=nan                              # All real scalars are initialised to NaN
      -fcheck=all                                  # Enable all run-time test of -fcheck: array-temps, bits, bounds, do, mem, pointer, recursion
      -Wall                                        # Enable all warnings
     )
@@ -50,7 +50,8 @@ if(MPI)
    find_package(MPI REQUIRED)
    add_definitions(${MPI_Fortran_COMPILE_FLAGS})
    include_directories(${MPI_Fortran_INCLUDE_PATH})
-   link_directories(${MPI_Fortran_LIBRARIES})
+   # Remove line as these are libraries, not paths to libraries
+   # link_directories(${MPI_Fortran_LIBRARIES})
 
    # Fetch and assign fortuno MPI lib
    FetchContent_Declare(
@@ -69,8 +70,11 @@ else()
    add_compile_definitions(USE_MPI=0)
 endif()
 
+
 # This library
 # -----------------------------
+option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
+
 add_library(lib_kmeans "")
 
 set_target_properties(lib_kmeans
@@ -85,14 +89,27 @@ set_target_properties(lib_kmeans
 # Linked libraries
 target_link_libraries(lib_kmeans OpenMP::OpenMP_Fortran ${MPI_Fortran_LIBRARIES})  # BLAS::BLAS 
 
-option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
-
 # Source code
 target_sources(lib_kmeans PRIVATE
        src/kmeans_m.f90
        src/grids_m.f90
        src/maths_m.f90
        src/mpi_m.f90
+       )
+
+# Fortuno wrapper layer
+add_library(fortuno_wrapper "")
+set_target_properties(fortuno_wrapper
+        PROPERTIES
+        VERSION 0.0.1
+        SOVERSION 0.0.1
+        LIBRARY_OUTPUT_NAME intmpi
+        ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_Fortran_LIB_DIRECTORY}
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_Fortran_LIB_DIRECTORY}
+        )
+target_link_libraries(fortuno_wrapper ${MPI_Fortran_LIBRARIES} ${fortuno_libs})
+target_sources(fortuno_wrapper PRIVATE
+       src/fortuno_interface_m.F90
        )
 
 # Testing
@@ -108,7 +125,7 @@ enable_testing()
 
 # Grids module
 add_executable(test_grids tests/test_grids_m.f90)
-target_link_libraries(test_grids PRIVATE lib_kmeans Fortuno::fortuno_serial)
+target_link_libraries(test_grids PRIVATE lib_kmeans fortuno_wrapper)
 
 add_test(NAME test_generate_real_space_grid_1D COMMAND test_grids)
 add_test(NAME test_generate_real_space_grid_2D COMMAND test_grids)
@@ -119,7 +136,7 @@ add_test(NAME test_generate_gaussian_2d COMMAND test_grids)
 
 # k-means module
 add_executable(test_kmeans tests/test_kmeans_m.f90)
-target_link_libraries(test_kmeans PRIVATE lib_kmeans ${fortuno_libs}) 
+target_link_libraries(test_kmeans PRIVATE lib_kmeans fortuno_wrapper) 
 
 add_test(NAME test_assign_points_to_centroids COMMAND test_kmeans)
 add_test(NAME test_update_centroids_no_movement COMMAND test_kmeans)
