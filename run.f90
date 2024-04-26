@@ -4,16 +4,16 @@
 ! ./cmake-build-debug/run_kmeans
 program run
     use, intrinsic :: iso_fortran_env, only: dp => real64
+    use omp_lib
 
     use grids_m,  only: linspace, linspace_to_grid
     use kmeans_m, only: weighted_kmeans
     implicit none
 
     ! Files
-    ! TODO(Alex) Remove hard-coding of project root
     ! Root
-    character(len=100) :: root = "/Users/alexanderbuccheri/Codes/kmeans/"
-    character(len=200) :: file
+    character(len=200) :: default_root = "/Users/alexanderbuccheri/Codes/kmeans/"
+    character(len=200) :: file, root
     integer :: fid
 
     ! Grid
@@ -30,6 +30,23 @@ program run
     integer :: ir, ic, niter
     logical :: verbose
 
+
+   ! Check if a command-line argument is provided
+    if (command_argument_count() > 0) then
+        ! Retrieve the first command-line argument
+        call get_command_argument(1, root)
+
+        ! Ensure trailing /
+        if (root(len_trim(root):len_trim(root)) /= '/') then
+            root = trim(root) // '/'
+        endif
+
+        write(*, *) 'Root directory:', trim(root)
+    else
+        write(*, *) 'No directory path provided. Defaulting to ', default_root
+        root = trim(default_root)
+    end if
+    
     ! Parse grid settings
     file = trim(adjustl(root)) // "jupyter/grid_settings.dat"
     open(newunit=fid, file=trim(adjustl(file)))
