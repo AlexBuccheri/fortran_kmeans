@@ -4,8 +4,9 @@ module mpi_m
     use mpi
 #endif    
     implicit none
-    ! As I don't intend to write MPI overloads for this project, let them propagate 
+    ! Let things propagate
     public
+
 
     !> @brief Place-holder for MPI type
     type, public :: mpi_t
@@ -23,15 +24,22 @@ module mpi_m
         procedure mpi_t_constructor
     end interface mpi_t
 
-#ifndef USE_MPI    
-    !> Serial overload for comm world
-    !! Could also have this set by mpi_init overload
+    ! interface mpi_bcast
+    !     procedure mpi_bcast_char
+    ! end interface mpi_bcast
+
+
+! Expose for MPI or mock for serial
+#ifdef USE_MPI 
+    public :: MPI_COMM_WORLD
+#else   
     integer, parameter :: mpi_comm_world = 100
 #endif   
 
 
 contains
 
+! Serial overloads
 #ifndef USE_MPI    
     !> @brief Serial overload for init
     subroutine mpi_init(ierr)
@@ -46,20 +54,25 @@ contains
     end subroutine MPI_Finalize
 #endif   
 
-
     !> @brief Constructor for mpi_t
     function mpi_t_constructor(comm, root) result(mpi_instance)
-        integer, intent(in)           :: comm  !< Communicator
+        integer, intent(in), optional :: comm  !< Communicator
         integer, intent(in), optional :: root  !< Root process id
         class(mpi_t), allocatable :: mpi_instance
         
-        mpi_instance%comm = comm
+        allocate(mpi_instance)
+        
+        if (present(comm)) then
+            mpi_instance%comm = comm
+        else
+            mpi_instance%comm = mpi_comm_world
+        endif
 
 #ifdef USE_MPI
         call MPI_Comm_rank(mpi_instance%comm, mpi_instance%rank, mpi_instance%ierr)
         call MPI_Comm_size(mpi_instance%comm, mpi_instance%np, mpi_instance%ierr)
 #else
-        mpi_instance%rank = 1
+        mpi_instance%rank = 0
         mpi_instance%np = 1
         mpi_instance%ierr = 0
 #endif      
@@ -78,6 +91,20 @@ contains
         class(mpi_t), intent(in) :: this
         is_root = this%rank == this%root
     end function is_root  
+
+
+!     subroutine mpi_bcast_char(comm, x)
+!         type(mpi_t), intent(in) :: comm  !< Communicator
+!         character(len=*), intent(in) :: x
+
+! #ifdef USE_MPI
+!         ! Should check it's size, and not len()
+!         call mpi_bcast(x, size(x), MPI_CHAR, comm%root, comm%comm)
+! #else
+!         continue
+! #endif    
+
+!     end subroutine mpi_bcast_char
 
 
     !> @brief Number of elements on process 'rank' for an array of n elements,
