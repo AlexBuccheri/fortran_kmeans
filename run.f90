@@ -6,7 +6,7 @@ program run
     use, intrinsic :: iso_fortran_env, only: dp => real64
     use omp_lib
 
-    use mpi_m, only: mpi_t, mpi_init, MPI_Finalize, distribute_elements_start_stop
+    use mpi_m, only: mpi_t, mpi_init, MPI_Finalize, distribute_elements_start_stop, mpi_barrier
     use grids_m,  only: linspace, linspace_to_grid
     use kmeans_m, only: weighted_kmeans
     implicit none
@@ -39,8 +39,6 @@ program run
     call mpi_init(ierr)
     comm = mpi_t() 
 
-    write(*, *) 'comm got initialised'
-
     ! For convenience, have each process do its own IO
 
     ! Check if a command-line argument is provided
@@ -59,8 +57,6 @@ program run
         root = trim(default_root)
     end if
     
-    write(*, *) 'Parse command line'
-
     ! Parse grid settings
     file = trim(adjustl(root)) // "jupyter/grid_settings.dat"
     open(newunit=fid, file=trim(adjustl(file)))
@@ -70,7 +66,7 @@ program run
     read(fid, *) ranges(:, 2), sampling(2)
     close(fid)
 
-    write(*, *) 'Parse grid settings'
+    write(*, *) 'Parsed grid settings'
 
     ! Generate grid from this
     nr = product(sampling)
@@ -98,6 +94,18 @@ program run
     allocate(start_end_indices(2, comm%np))
     start_end_indices = distribute_elements_start_stop(comm%np, nr)
     ir_indices = [(i, i= start_end_indices(1, comm%rank+1), start_end_indices(2, comm%rank+1))]
+
+    if (comm%is_root()) then
+        write(*, *) 'Distribution per MPI process:'
+        do i = 1, comm%np
+            write(*, *) 'Process', i - 1, start_end_indices(:, i)
+        enddo
+    endif
+    !  Index distribution looks correct
+    ! write(400, *) ir_indices
+    ! write(401, *) ir_indices
+
+    call mpi_barrier(comm%comm, comm%ierr)
 
     ! Parse initial centroids
     file = trim(adjustl(root)) // "jupyter/init_centroids.dat"

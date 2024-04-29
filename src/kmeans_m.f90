@@ -40,10 +40,15 @@ contains
         n_centroids = size(centroids, 2)
         n_points = size(grid_points, 2)
 
+        ! write(*, *) 'n_points, n_centroids', n_points, n_centroids
+
         ! We don't know how many points will be assigned per cluster
         ! Assuming a uniform distribution, one expects ~ n_points / n_centroids
         ! Allocate a conservative upper bound (could replace with linked list)
-        max_cpoints = int(3 * n_points / n_centroids)
+        !max_cpoints = int(3 * n_points / n_centroids)
+
+        ! Try a maximum upper bound
+        max_cpoints = n_points
         allocate(cluster_sizes(n_centroids), source=0)
 
         ! Work arrays
