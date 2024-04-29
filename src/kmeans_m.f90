@@ -18,9 +18,15 @@ contains
     !> @brief Assign each grid point to the closest centroid. 
     !! A centroid and its set of nearest grid points defines a cluster.
     !!
-    !! TODOs
-    !!  * Add maths
+    !! This can be mathematically expressed as:
+    !!\f[ 
+    !!  C_\mu=\left\{Z\left(\mathbf{r}_i\right) \mid \operatorname{dist}\left(Z\left(\mathbf{r}_i\right), Z\left(\mathbf{r}_\mu\right)\right) 
+    !!      \leq \operatorname{dist}\left(Z\left(\mathbf{r}_i\right), Z\left(\mathbf{r}_m\right)\right) \text { for all } m \neq \mu\right\}
+    !!\f]
+    !! where \f$ Z(\mathbf{r}_i) \f$ are data points and \f$ Z(\mathbf{r}_\mu) \f$ is the centroid.
     !!
+    !! See eqs 10-13 in [Complex-valued K-means clustering of interpolative separable density fitting algorithm for large-scale hybrid functional 
+    !! enabled ab initio  molecular dynamics simulations within plane waves](https://doi.org/10.48550/arXiv.2208.07731)
     subroutine assign_points_to_centroids(grid_points, centroids, clusters, cluster_sizes)
         real(real64), intent(in) :: grid_points(:, :)               !< Real-space grid (n_dims, N)
         real(real64), intent(in) :: centroids(:, :)                 !< Centroid positions (n_dims, Ncentroids)
@@ -40,16 +46,13 @@ contains
         n_centroids = size(centroids, 2)
         n_points = size(grid_points, 2)
 
-        ! write(*, *) 'n_points, n_centroids', n_points, n_centroids
-
         ! We don't know how many points will be assigned per cluster
         ! Assuming a uniform distribution, one expects ~ n_points / n_centroids
         ! Allocate a conservative upper bound (could replace with linked list)
         !max_cpoints = int(3 * n_points / n_centroids)
 
-        ! TODO(Alex) Prior max_cpoints estimate is too low when running with MPI
-        ! Perhaps using `n_points` as an upper bound for a distributed grid is not a problem
-        ! Try a maximum upper bound
+        ! TODO(Alex) Prior max_cpoints estimate is too low when running with MPI, so I've used the 
+        ! maximum number possible
         max_cpoints = n_points
         allocate(cluster_sizes(n_centroids), source=0)
 
@@ -76,6 +79,12 @@ contains
     
 
     !> @brief Compute a new set of centroids.
+    !!
+    !! A centroid is defined as:
+    !! \f[
+    !!    \mathbf{r}_\mu = \frac{\sum_{\mathbf{r}_j \in C_\mu} \mathbf{r}_j w(\mathbf{r}_j)}{\sum_{\mathbf{r}_j \in C_\mu} w(\mathbf{r}_j)}
+    !! \f]
+    !! where \f$\mathbf{r}_j\f$ and \f$w(\mathbf{r}_j\f$ are grid points and weights restricted to the cluster \f$ C_\mu \f$, respectively.
     subroutine update_centroids_serial(grid, weight, clusters, cluster_sizes, centroids)
         real(real64), intent(in)    :: grid(:, :)               !< Real-space grid (n_dims, N)
         real(real64), intent(in)    :: weight(:)                !< Weights (N)
@@ -131,15 +140,23 @@ contains
 
     end subroutine update_centroids_serial
 
+
     !> @brief Compute a new set of centroids.
-    ! This routine has not been checked, nor should it be called when running in serial
-    ! MPI routines are copy-pastes because this is just prototyping - no point engineering the 
-    ! overloads properly
+    !!
+    !! A centroid is defined as:
+    !! \f[
+    !!    \mathbf{r}_\mu = \frac{\sum_{\mathbf{r}_j \in C_\mu} \mathbf{r}_j w(\mathbf{r}_j)}{\sum_{\mathbf{r}_j \in C_\mu} w(\mathbf{r}_j)}
+    !! \f]
+    !! where \f$\mathbf{r}_j\f$ and \f$w(\mathbf{r}_j\f$ are grid points and weights restricted to the cluster \f$ C_\mu \f$, respectively.
+    !!
+    !! TODO(Alex)
+    !! This routine has not been checked, nor should it be called when running in serial
+    !! MPI routines are copy-pastes because this is just prototyping - no point engineering the overloads properly.
     subroutine update_centroids_mpi(comm, grid, weight, clusters, cluster_sizes, centroids)
 #ifdef USE_MPI          
         use mpi, only: MPI_DOUBLE_PRECISION, MPI_SUM, MPI_ALLREDUCE, MPI_IN_PLACE
 #endif 
-        type(mpi_t),  intent(inout) :: comm
+        type(mpi_t),  intent(inout) :: comm                     !< MPI instance
         real(real64), intent(in)    :: grid(:, :)               !< Real-space grid (n_dims, N)
         real(real64), intent(in)    :: weight(:)                !< Weights (N)
         integer,      intent(in)    :: clusters(:, :)           !< Cluster assignment for each grid point (max_cpoints, Ncentroids)
@@ -156,15 +173,12 @@ contains
         allocate(denominator(n_centroids))
 
         ! The indexing of weight and grid must be consistent => must have the same distribution
-        ! or there must be a local-to-global index map
+        ! or there must be a local-to-global index map (which clearly I am not using)
         if (size(grid, 2) /= size(weight)) then
             write(*, *) "The number of grid points /= weight. This might indicate that their distributions &
             & differ, hence the indexing will not be consistent"
             error stop 101
         endif
-
-        ! Zero all input centroids. This is PROBABLY NOT NEEDED
-        centroids = 0._real64
 
         do icen = 1, n_centroids
             centroids(:, icen) = 0._real64
@@ -190,7 +204,10 @@ contains
     end subroutine update_centroids_mpi
 
 
-    ! TODO(Alex) Document exactly what this is computing/returning
+    !> @brief Compute the difference in two grids as abs(\mathbf{g}_1 - \mathbf{g}_2).
+    !!
+    !! If an component of the difference vector for grid point i is greater than
+    !! the tolerance, the element points_differ(i) is set to true.
     subroutine compute_grid_difference(points, updated_points, tol, points_differ)
         real(real64), intent(in)    :: points(:, :)      !< Real-space grids (n_dims, N)
         real(real64), intent(in)    :: updated_points(:, :)
@@ -216,6 +233,7 @@ contains
 
     ! This routine can be less efficient as it should not be called in production runs
     ! or perhaps more accurately, when things are working
+    !> @brief Report differences returned from `compute_grid_difference`.
     subroutine report_differences_in_grids(points, updated_points, tol, points_differ)
         real(real64), intent(in)  :: points(:, :)      !< Real-space grids (n_dims, N)
         real(real64), intent(in)  :: updated_points(:, :)
@@ -231,7 +249,6 @@ contains
         n_unconverged = size(indices)
         allocate(diff(size(points, 1)))
 
-        ! TODO Generalise for the pretty print... although it's absolutely not worth the hassle
         write(*, *) "# Current Point  ,  Prior Point  ,  |ri - r_{i-1}|  ,  tol"
         do j = 1, n_unconverged
             i = indices(j)
@@ -245,7 +262,25 @@ contains
 
     !> @brief Weighted K-means clustering.
     !!
-    !! TODO(Alex) Add maths
+    !! The K-means algorithm divides a set of \f$N_r\f$ samples (in this case, grid points) into \f$N_\mu\f$ disjoin clusters \f$C\f$.
+    !! The mean of each cluster defines the cluster centroid. Note that centroids are not, in general, points from the discrte `grid`
+    !! - they can take any contiuous values that span the grid limits.
+    !!
+    !! ## Theory
+    !! Given a grid, and some initial guess at centroids, the K-means algorithm aims to choose centroids that minimise the inertia, 
+    !! or within-cluster sum-of-squares criterion:
+    !! \f[
+    !!    argmin \sum^{N_\mu}_{\mu=1} \sum_{\mathbf{r}_\mathbf{k} \in C_\mu} || Z(\mathbf{r}_k) - Z(\mathbf{r}_\mu)||^2
+    !! \f]
+    !! This implementation is based on Algorithm 1. given in [Complex-valued K-means clustering of interpolative separable density fitting algorithm 
+    !! for large-scale hybrid functional enabled ab initio  molecular dynamics simulations within plane waves](https://doi.org/10.48550/arXiv.2208.07731),
+    !! however it is equivalent to implementations found in packages such as [scikit-learn](https://scikit-learn.org/stable/modules/clustering.html#k-means).
+    !!
+    !! ## Algorithm Description
+    !! The K-means algorithm consists of looping between the two other steps. 
+    !!  1. The first step assigns each sample to its nearest centroid. See `assign_points_to_centroids`
+    !!  2. The second step creates new centroids by taking the mean value of all of the samples assigned to each previous centroid. See `update_centroids`
+    !! The difference between the old and the new centroids are computed, and the algorithm repeats these last two steps until this value is less than a threshold.
     subroutine weighted_kmeans(comm, grid, weight, centroids, n_iter, centroid_tol, verbose)
         type(mpi_t),  intent(inout) :: comm                      !< MPI instance
         real(real64), intent(in)    :: grid(:, :)                !< Grid    (n_dim, n_points)
