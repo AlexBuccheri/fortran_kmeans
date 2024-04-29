@@ -47,6 +47,8 @@ contains
         ! Allocate a conservative upper bound (could replace with linked list)
         !max_cpoints = int(3 * n_points / n_centroids)
 
+        ! TODO(Alex) Prior max_cpoints estimate is too low when running with MPI
+        ! Perhaps using `n_points` as an upper bound for a distributed grid is not a problem
         ! Try a maximum upper bound
         max_cpoints = n_points
         allocate(cluster_sizes(n_centroids), source=0)
@@ -135,7 +137,7 @@ contains
     ! overloads properly
     subroutine update_centroids_mpi(comm, grid, weight, clusters, cluster_sizes, centroids)
 #ifdef USE_MPI          
-        use mpi, only: MPI_DOUBLE_PRECISION, MPI_SUM, MPI_ALLREDUCE
+        use mpi, only: MPI_DOUBLE_PRECISION, MPI_SUM, MPI_ALLREDUCE, MPI_IN_PLACE
 #endif 
         type(mpi_t),  intent(inout) :: comm
         real(real64), intent(in)    :: grid(:, :)               !< Real-space grid (n_dims, N)
@@ -147,20 +149,17 @@ contains
         !                                                         Out: Updated centroid positions
         
         integer                   :: n_dims, n_centroids, icen, j, ir
-        real(real64), allocatable :: local_centroids(:, :)     !< Contribution to all centroids from a subset of grid points
-        real(real64), allocatable :: local_denominator(:), denominator(:)
+        real(real64), allocatable :: denominator(:)
 
         n_dims = size(grid, 1)
         n_centroids = size(cluster_sizes)
-        ! local arrays can be removed if INPLACE MPI call works
-        allocate(local_denominator(n_centroids), denominator(n_centroids))
-        allocate(local_centroids(n_dims, n_centroids))
+        allocate(denominator(n_centroids))
 
         ! The indexing of weight and grid must be consistent => must have the same distribution
         ! or there must be a local-to-global index map
         if (size(grid, 2) /= size(weight)) then
             write(*, *) "The number of grid points /= weight. This might indicate that their distributions &
-            differ, hence the indexing will not be consistent"
+            & differ, hence the indexing will not be consistent"
             error stop 101
         endif
 
@@ -168,23 +167,20 @@ contains
         centroids = 0._real64
 
         do icen = 1, n_centroids
-            local_centroids(:, icen) = 0._real64
-            local_denominator(icen) = 0._real64
+            centroids(:, icen) = 0._real64
+            denominator(icen) = 0._real64
             ! Iterate over all points in current centroid
             do j = 1, cluster_sizes(icen)
                 ir = clusters(j, icen)
-                local_centroids(:, icen) = local_centroids(:, icen) + (grid(:, ir) * weight(ir))
-                local_denominator(icen) = local_denominator(icen) + weight(ir)
+                centroids(:, icen) = centroids(:, icen) + (grid(:, ir) * weight(ir))
+                denominator(icen) = denominator(icen) + weight(ir)
             enddo
         enddo
 
 #ifdef USE_MPI         
-        ! TODO Try INPLACE once this is validated, and scrap "local_" arrays
-        call MPI_ALLREDUCE(local_centroids, centroids, size(centroids), MPI_DOUBLE_PRECISION, MPI_SUM, comm%comm, comm%ierr)
-        call MPI_ALLREDUCE(local_denominator, denominator, size(denominator), MPI_DOUBLE_PRECISION, MPI_SUM, comm%comm, comm%ierr)
+        call MPI_ALLREDUCE(MPI_IN_PLACE, centroids, size(centroids), MPI_DOUBLE_PRECISION, MPI_SUM, comm%comm, comm%ierr)
+        call MPI_ALLREDUCE(MPI_IN_PLACE, denominator, size(denominator), MPI_DOUBLE_PRECISION, MPI_SUM, comm%comm, comm%ierr)
 #endif         
-        deallocate(local_centroids)
-        deallocate(local_denominator)
 
         do icen = 1, n_centroids
             centroids(:, icen) = centroids(:, icen) / denominator(icen) 
