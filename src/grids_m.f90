@@ -40,7 +40,7 @@ contains
         real(real64),           intent(out) :: grid(:, :)  !< real-space grid
 
         integer :: i, j, k, jk, ir, n_points, n_dims
-        integer, allocatable :: int_point(:), integer_grid(:, :)
+        integer, allocatable :: int_point(:)
         real(real64), allocatable :: org(:)
 
         n_dims = size(sampling)
