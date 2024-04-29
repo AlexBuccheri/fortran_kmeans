@@ -10,6 +10,7 @@ program test_kmeans_m
     use fortuno_interface_m, only: execute_cmd_app, test, check, is_equal
     use grids_m,             only: linspace, linspace_to_grid, generate_gaussian
     use maths_m,             only: all_close
+    use mpi_m,               only: mpi_t
 
     ! Module under test
     use kmeans_m, only : assign_points_to_centroids, update_centroids, compute_grid_difference, & 
@@ -238,8 +239,10 @@ contains
 
     ! end subroutine random_points
 
-
+    ! This test is only defined if MPI IS NOT used
     subroutine test_weighted_kmeans()
+        ! MPI instance
+        type(mpi_t)          :: comm
         ! Grid
         integer,  parameter  :: n_dim = 2
         integer              :: nr
@@ -257,6 +260,9 @@ contains
         integer :: ix, iy, ir, n_iter, i, n_centroid, ierr
         logical :: verbose
         integer, parameter :: seed = 20180815
+
+#ifndef USE_MPI  
+        comm = mpi_t()
 
         ! Grid
         sampling = [50, 50]
@@ -304,7 +310,7 @@ contains
             write(101, *) grid(:, ir), 0._dp
         enddo
     
-        call weighted_kmeans(grid, total_gaussian, centroids, n_iter, verbose=verbose)
+        call weighted_kmeans(comm, grid, total_gaussian, centroids, n_iter, verbose=verbose)
 
         ! Output final centroids for plotting over Gaussians
         do i = 1, n_centroid
@@ -323,6 +329,7 @@ contains
         ! Assert final centroid positions -> Regression test rather than unit
         ! Check if they fall on grid points -> If not, pin them to the closest grid points
         ! Move on to a) Parallelisation and b) greedy k-means
+#endif
 
     end subroutine test_weighted_kmeans
 

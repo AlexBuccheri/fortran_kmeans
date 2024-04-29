@@ -2,7 +2,6 @@
 module kmeans_m
     use, intrinsic :: iso_fortran_env
     use omp_lib
-
     use mpi_m, only: mpi_t
     implicit none
 
@@ -125,9 +124,14 @@ contains
 
     end subroutine update_centroids_serial
 
-
     !> @brief Compute a new set of centroids.
+    ! This routine has not been checked, nor should it be called when running in serial
+    ! MPI routines are copy-pastes because this is just prototyping - no point engineering the 
+    ! overloads properly
     subroutine update_centroids_mpi(comm, grid, weight, clusters, cluster_sizes, centroids)
+#ifdef USE_MPI          
+        use mpi, only: MPI_DOUBLE_PRECISION, MPI_SUM, MPI_ALLREDUCE
+#endif 
         type(mpi_t),  intent(inout) :: comm
         real(real64), intent(in)    :: grid(:, :)               !< Real-space grid (n_dims, N)
         real(real64), intent(in)    :: weight(:)                !< Weights (N)
@@ -138,23 +142,47 @@ contains
         !                                                         Out: Updated centroid positions
         
         integer                   :: n_dims, n_centroids, icen, j, ir
-        real(real64), allocatable :: numerator(:), local_centroid(:)
-        real(real64)              :: denominator
+        real(real64), allocatable :: local_centroids(:, :)     !< Contribution to all centroids from a subset of grid points
+        real(real64), allocatable :: local_denominator(:), denominator(:)
 
         n_dims = size(grid, 1)
         n_centroids = size(cluster_sizes)
-        allocate(numerator(n_dims))
+        ! local arrays can be removed if INPLACE MPI call works
+        allocate(local_denominator(n_centroids), denominator(n_centroids))
+        allocate(local_centroids(n_dims, n_centroids))
+
+        ! The indexing of weight and grid must be consistent => must have the same distribution
+        ! or there must be a local-to-global index map
+        if (size(grid, 2) /= size(weight)) then
+            write(*, *) "The number of grid points /= weight. This might indicate that their distributions &
+            differ, hence the indexing will not be consistent"
+            error stop 101
+        endif
+
+        ! Zero all input centroids. This is PROBABLY NOT NEEDED
+        centroids = 0._real64
 
         do icen = 1, n_centroids
-            numerator = 0._real64
-            denominator = 0._real64
+            local_centroids(:, icen) = 0._real64
+            local_denominator(icen) = 0._real64
             ! Iterate over all points in current centroid
             do j = 1, cluster_sizes(icen)
                 ir = clusters(j, icen)
-                numerator(:) = numerator(:) + (grid(:, ir) * weight(ir))
-                denominator = denominator + weight(ir)
+                local_centroids(:, icen) = local_centroids(:, icen) + (grid(:, ir) * weight(ir))
+                local_denominator(icen) = local_denominator(icen) + weight(ir)
             enddo
-            centroids(:, icen) = numerator(:) / denominator
+        enddo
+
+#ifdef USE_MPI         
+        ! TODO Try INPLACE once this is validated, and scrap "local_" arrays
+        call MPI_ALLREDUCE(local_centroids, centroids, size(centroids), MPI_DOUBLE_PRECISION, MPI_SUM, comm%comm, comm%ierr)
+        call MPI_ALLREDUCE(local_denominator, denominator, size(denominator), MPI_DOUBLE_PRECISION, MPI_SUM, comm%comm, comm%ierr)
+#endif         
+        deallocate(local_centroids)
+        deallocate(local_denominator)
+
+        do icen = 1, n_centroids
+            centroids(:, icen) = centroids(:, icen) / denominator(icen) 
         enddo
 
     end subroutine update_centroids_mpi
@@ -216,9 +244,10 @@ contains
     !> @brief Weighted K-means clustering.
     !!
     !! TODO(Alex) Add maths
-    subroutine weighted_kmeans(grid, weight, centroids, n_iter, centroid_tol, verbose)
-        real(real64), intent(in) :: grid(:, :)                   !< Grid    (n_dim, n_points)
-        real(real64), intent(in) :: weight(:)                    !< Weights (n_points)
+    subroutine weighted_kmeans(comm, grid, weight, centroids, n_iter, centroid_tol, verbose)
+        type(mpi_t),  intent(inout) :: comm                      !< MPI instance
+        real(real64), intent(in)    :: grid(:, :)                !< Grid    (n_dim, n_points)
+        real(real64), intent(in)    :: weight(:)                 !< Weights (n_points)
         real(real64), intent(inout) :: centroids(:, :)           !< In: Initial centroids (n_dim, n_centroid)
         !                                                           Out: Final centroids
         integer,      optional, intent(in) :: n_iter             !< Optional max number of iterations
@@ -270,7 +299,11 @@ contains
         do i = 1, n_iterations
             if (print_out) write(*, *) 'Iteration ', i
             call assign_points_to_centroids(grid, centroids, clusters, cluster_sizes)
+#ifdef USE_MPI          
+            call update_centroids(comm, grid, weight, clusters, cluster_sizes, centroids)
+#else 
             call update_centroids(grid, weight, clusters, cluster_sizes, centroids)
+#endif 
             call compute_grid_difference(prior_centroids, centroids, tol, points_differ)
             if (any(points_differ)) then
                 if (print_out) call report_differences_in_grids(prior_centroids, centroids, tol, points_differ)
@@ -285,5 +318,7 @@ contains
         ! TODO Return number of iterations used
 
     end subroutine weighted_kmeans
+
+
 
 end module kmeans_m
