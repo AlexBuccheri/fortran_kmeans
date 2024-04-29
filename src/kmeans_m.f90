@@ -172,6 +172,7 @@ contains
             ! Iterate over all points in current centroid
             do j = 1, cluster_sizes(icen)
                 ir = clusters(j, icen)
+                ! Initially accumulate the numerator in `centroids`
                 centroids(:, icen) = centroids(:, icen) + (grid(:, ir) * weight(ir))
                 denominator(icen) = denominator(icen) + weight(ir)
             enddo
