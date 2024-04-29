@@ -1,11 +1,36 @@
 # Test Program for Weighted K-Means Algorithm, plus the Fortuno Test Framework (in Fortran)
 
+## Serial (Well, threaded, no MPI)
+
 CMake configure, build and test commands:
 
 ```shell
-cmake --fresh -B cmake-build-debug   
+cmake --fresh -B serial-cmake-build-debug -DCMAKE_BUILD_TYPE=Debug -DMPI=Off
+cmake --build serial-cmake-build-debug
+ctest --test-dir ./serial-cmake-build-debug --output-on-failure --verbose
+```
+
+Run the application test with:
+
+```shell
+./serial-cmake-build-debug/run_kmeans
+```
+
+## MPI
+
+```shell
+cmake --fresh -B cmake-build-debug -DCMAKE_BUILD_TYPE=Debug  
 cmake --build cmake-build-debug
-ctest --test-dir ./cmake-build-debug --output-on-failure --verbose
+ctest --test-dir ./cmake-build-debug --output-on-failure
+```
+
+ctest will fail for MPI build because one needs to use the MPI routines provided by the framework:
+
+```shell
+# Executing test items
+.*** The MPI_Comm_f2c() function was called before MPI_INIT was invoked.
+*** This is disallowed by the MPI standard.
+*** Your MPI job will now abort.
 ```
 
 One can also run each test binary manually:
@@ -14,13 +39,18 @@ One can also run each test binary manually:
 ./cmake-build-debug/test_kmeans
 ```
 
+Run the application test with:
+
+```shell
+mpirun -np 4 cmake-build-debug/run_kmeans
+```
+
 Fortuno is available [here](https://github.com/fortuno-repos/fortuno)
 
 ### Build Issues
 
 * Unit tests for debug build all crash when building with `-ffpe-trap=invalid,zero,overflow,underflow` and/or
   `-finit-real=nan`. This needs investigating. One assumes the issue is in the grid routines.
-
 
 ### Centroid Algorithm
 
@@ -36,7 +66,7 @@ final centroids contain contributions from all grid points, over all processes. 
 
 #### TODOs
 
-* Implement "kmeans++" to find initial weights - see my python reference v
+* Implement "kmeans++" to find initial weights - see my python reference
   * Extend to "greedy kmeans++"
 
 ### QR Decomposition
