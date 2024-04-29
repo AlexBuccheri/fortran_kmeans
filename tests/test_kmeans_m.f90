@@ -83,11 +83,13 @@ contains
 
 
     subroutine test_update_centroids_no_movement()
+        type(mpi_t)           :: comm
         real(dp), allocatable :: grid(:, :), centroids(:, :), uniform_weighting(:)
         integer,  allocatable :: clusters(:, :), cluster_sizes(:)
 
         integer :: i, Nr
 
+        comm = mpi_t()
         Nr = 8
         grid = reshape([[0, 0], [0, 1], [1, 0], [1, 1], &
                         [2, 0], [3, 0], [2, 1], [3, 1]], [2, Nr])
@@ -109,7 +111,7 @@ contains
             uniform_weighting(i) = 1._dp / real(Nr, dp)
         enddo
         
-        call update_centroids(grid, uniform_weighting, clusters, cluster_sizes, centroids)
+        call update_centroids(comm, grid, uniform_weighting, clusters, cluster_sizes, centroids)
         call check(all_close(centroids(:, 1), [0.5_dp, 0.5_dp]))
         call check(all_close(centroids(:, 2), [2.5_dp, 0.5_dp]))
 

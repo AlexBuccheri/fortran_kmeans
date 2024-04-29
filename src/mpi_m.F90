@@ -52,6 +52,12 @@ contains
         integer, intent(inout) :: ierr
         ierr = 0
     end subroutine MPI_Finalize
+
+    subroutine mpi_barrier(comm, ierr)
+        integer, intent(in) :: comm
+        integer, intent(in) :: ierr
+        continue
+    end subroutine mpi_barrier
 #endif   
 
     !> @brief Constructor for mpi_t

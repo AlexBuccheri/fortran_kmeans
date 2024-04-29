@@ -9,10 +9,6 @@ module kmeans_m
     public :: assign_points_to_centroids, update_centroids, compute_grid_difference, &
               report_differences_in_grids, weighted_kmeans
 
-    interface update_centroids
-        module procedure :: update_centroids_serial, update_centroids_mpi
-    end interface
-
 contains
 
     !> @brief Assign each grid point to the closest centroid. 
@@ -85,74 +81,7 @@ contains
     !!    \mathbf{r}_\mu = \frac{\sum_{\mathbf{r}_j \in C_\mu} \mathbf{r}_j w(\mathbf{r}_j)}{\sum_{\mathbf{r}_j \in C_\mu} w(\mathbf{r}_j)}
     !! \f]
     !! where \f$\mathbf{r}_j\f$ and \f$w(\mathbf{r}_j\f$ are grid points and weights restricted to the cluster \f$ C_\mu \f$, respectively.
-    subroutine update_centroids_serial(grid, weight, clusters, cluster_sizes, centroids)
-        real(real64), intent(in)    :: grid(:, :)               !< Real-space grid (n_dims, N)
-        real(real64), intent(in)    :: weight(:)                !< Weights (N)
-        integer,      intent(in)    :: clusters(:, :)           !< Cluster assignment for each grid point (max_cpoints, Ncentroids)
-        integer,      intent(in)    :: cluster_sizes(:)         !< Keep track of the number of points assigned to each cluster
-        
-        real(real64), intent(inout) :: centroids(:, :)          !< In: centroid positions (n_dims, Ncentroids)
-        !                                                         Out: Updated centroid positions
-        
-        integer                   :: n_dims, n_centroids, icen, j, ir
-        real(real64), allocatable :: numerator(:), local_centroid(:)
-        real(real64)              :: denominator
-
-        n_dims = size(grid, 1)
-        n_centroids = size(cluster_sizes)
-        allocate(numerator(n_dims))
-
-        do icen = 1, n_centroids
-            numerator = 0._real64
-            denominator = 0._real64
-            ! Iterate over all points in current centroid
-            do j = 1, cluster_sizes(icen)
-                ir = clusters(j, icen)
-                numerator(:) = numerator(:) + (grid(:, ir) * weight(ir))
-                denominator = denominator + weight(ir)
-            enddo
-            centroids(:, icen) = numerator(:) / denominator
-        enddo
-
-        ! Causes the regression test to crash, and I can't see what the problem is
-        ! allocate(local_centroid(n_dims))
-        ! !$omp parallel default(shared) private(numerator, denominator) shared(local_centroid, centroids)
-        ! do icen = 1, n_centroids
-        !     numerator = 0._real64
-        !     denominator = 0._real64
-
-        !     ! Iterate over all points in current centroid
-        !     !$omp do private(ir)
-        !     do j = 1, cluster_sizes(icen)
-        !         ir = clusters(j, icen)
-        !         numerator(:) = numerator(:) + (grid(:, ir) * weight(ir))
-        !         denominator = denominator + weight(ir)
-        !     enddo
-        !     !$omp end do
-
-        !     !$OMP CRITICAL
-        !         local_centroid(:) = local_centroid(:) + (numerator(:) / denominator)
-        !         centroids(:, icen) = local_centroid(:)
-        !     !$OMP END CRITICAL
-    
-        ! enddo
-        ! !$omp end parallel
-
-    end subroutine update_centroids_serial
-
-
-    !> @brief Compute a new set of centroids.
-    !!
-    !! A centroid is defined as:
-    !! \f[
-    !!    \mathbf{r}_\mu = \frac{\sum_{\mathbf{r}_j \in C_\mu} \mathbf{r}_j w(\mathbf{r}_j)}{\sum_{\mathbf{r}_j \in C_\mu} w(\mathbf{r}_j)}
-    !! \f]
-    !! where \f$\mathbf{r}_j\f$ and \f$w(\mathbf{r}_j\f$ are grid points and weights restricted to the cluster \f$ C_\mu \f$, respectively.
-    !!
-    !! TODO(Alex)
-    !! This routine has not been checked, nor should it be called when running in serial
-    !! MPI routines are copy-pastes because this is just prototyping - no point engineering the overloads properly.
-    subroutine update_centroids_mpi(comm, grid, weight, clusters, cluster_sizes, centroids)
+    subroutine update_centroids(comm, grid, weight, clusters, cluster_sizes, centroids)
 #ifdef USE_MPI          
         use mpi, only: MPI_DOUBLE_PRECISION, MPI_SUM, MPI_ALLREDUCE, MPI_IN_PLACE
 #endif 
@@ -201,7 +130,32 @@ contains
             centroids(:, icen) = centroids(:, icen) / denominator(icen) 
         enddo
 
-    end subroutine update_centroids_mpi
+    end subroutine update_centroids
+
+        ! A look at how one might implement the above with OMP
+        ! Causes the regression test to crash, and I can't see what the problem is
+        ! allocate(local_centroid(n_dims))
+        ! !$omp parallel default(shared) private(numerator, denominator) shared(local_centroid, centroids)
+        ! do icen = 1, n_centroids
+        !     numerator = 0._real64
+        !     denominator = 0._real64
+
+        !     ! Iterate over all points in current centroid
+        !     !$omp do private(ir)
+        !     do j = 1, cluster_sizes(icen)
+        !         ir = clusters(j, icen)
+        !         numerator(:) = numerator(:) + (grid(:, ir) * weight(ir))
+        !         denominator = denominator + weight(ir)
+        !     enddo
+        !     !$omp end do
+
+        !     !$OMP CRITICAL
+        !         local_centroid(:) = local_centroid(:) + (numerator(:) / denominator)
+        !         centroids(:, icen) = local_centroid(:)
+        !     !$OMP END CRITICAL
+    
+        ! enddo
+        ! !$omp end parallel
 
 
     !> @brief Compute the difference in two grids as abs(\mathbf{g}_1 - \mathbf{g}_2).
@@ -336,11 +290,7 @@ contains
         do i = 1, n_iterations
             if (print_out) write(*, *) 'Iteration ', i
             call assign_points_to_centroids(grid, centroids, clusters, cluster_sizes)
-#ifdef USE_MPI          
             call update_centroids(comm, grid, weight, clusters, cluster_sizes, centroids)
-#else 
-            call update_centroids(grid, weight, clusters, cluster_sizes, centroids)
-#endif 
             call compute_grid_difference(prior_centroids, centroids, tol, points_differ)
             if (any(points_differ)) then
                 if (print_out) call report_differences_in_grids(prior_centroids, centroids, tol, points_differ)
