@@ -10,7 +10,7 @@ set(CMAKE_Fortran_MODULE_DIRECTORY ${PROJECT_BINARY_DIR}/modules)
 # Compiler flags for GCC only
 set(GCC_BASE 
    -fopenmp   # OMP always enabled
-   -cpp
+   -cpp       # Use c-preprocessor
    )
 
 set(GCC_DEBUG
@@ -52,9 +52,15 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(Fortuno)
 set(fortuno_libs Fortuno::fortuno_serial)
 
+# Interface to control scope of compiler options
+add_library(common_options INTERFACE)
+
+
 # MPI-dependent settings
 option(MPI "Use MPI" ON)
 if(MPI)
+   message("-- Using MPI")
+
    # Find MPI library and headers
    find_package(MPI REQUIRED)
    add_definitions(${MPI_Fortran_COMPILE_FLAGS})
@@ -70,12 +76,14 @@ if(MPI)
    list(APPEND fortuno_libs Fortuno::fortuno_mpi)
 
    # Set preprocessor variable 
-   add_compile_definitions(USE_MPI=1)
+   # add_compile_definitions(USE_MPI=1)
+   target_compile_definitions(common_options INTERFACE USE_MPI)
 
 else()
    set(MPI_Fortran_LIBRARIES "")
-   add_compile_definitions(USE_MPI=0)
+   message("-- Not using MPI")
 endif()
+
 
 
 # This library
@@ -94,14 +102,14 @@ set_target_properties(lib_kmeans
         )
 
 # Linked libraries
-target_link_libraries(lib_kmeans PRIVATE OpenMP::OpenMP_Fortran ${MPI_Fortran_LIBRARIES})  # BLAS::BLAS 
+target_link_libraries(lib_kmeans PRIVATE OpenMP::OpenMP_Fortran ${MPI_Fortran_LIBRARIES} common_options)  # BLAS::BLAS 
 
 # Source code
 target_sources(lib_kmeans PUBLIC
-       src/kmeans_m.f90
+       src/kmeans_m.F90
        src/grids_m.f90
        src/maths_m.f90
-       src/mpi_m.f90
+       src/mpi_m.F90
        )
 
 # Fortuno wrapper layer
@@ -124,7 +132,7 @@ target_sources(fortuno_wrapper PRIVATE
 
 # Testing program
 add_executable(run_kmeans run.f90)
-target_link_libraries(run_kmeans PRIVATE lib_kmeans OpenMP::OpenMP_Fortran ${MPI_Fortran_LIBRARIES}) 
+target_link_libraries(run_kmeans PRIVATE lib_kmeans OpenMP::OpenMP_Fortran ${MPI_Fortran_LIBRARIES} common_options) 
 
 # Library unit tests
 enable_testing()
@@ -140,8 +148,8 @@ add_test(NAME test_linspace_to_grid2d COMMAND test_grids)
 add_test(NAME test_generate_gaussian_2d COMMAND test_grids)
 
 # k-means module
-add_executable(test_kmeans tests/test_kmeans_m.f90)
-target_link_libraries(test_kmeans PRIVATE lib_kmeans fortuno_wrapper) 
+add_executable(test_kmeans tests/test_kmeans_m.F90)
+target_link_libraries(test_kmeans PRIVATE lib_kmeans fortuno_wrapper common_options) 
 add_test(NAME test_assign_points_to_centroids COMMAND test_kmeans)
 add_test(NAME test_update_centroids_no_movement COMMAND test_kmeans)
 add_test(NAME test_points_are_converged COMMAND test_kmeans)
