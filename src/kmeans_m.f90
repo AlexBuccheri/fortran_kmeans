@@ -19,7 +19,8 @@ contains
     !!  C_\mu=\left\{Z\left(\mathbf{r}_i\right) \mid \operatorname{dist}\left(Z\left(\mathbf{r}_i\right), Z\left(\mathbf{r}_\mu\right)\right) 
     !!      \leq \operatorname{dist}\left(Z\left(\mathbf{r}_i\right), Z\left(\mathbf{r}_m\right)\right) \text { for all } m \neq \mu\right\}
     !!\f]
-    !! where \f$ Z(\mathbf{r}_i) \f$ are data points and \f$ Z(\mathbf{r}_\mu) \f$ is the centroid.
+    !! where \f$ Z(\mathbf{r}_i) \f$ are data points and \f$ Z(\mathbf{r}_\mu) \f$ is the centroid. The distance metric, \f$\operatorname{dist}\f$,
+    !! is defined as the dot product in this implementation.    
     !!
     !! See eqs 10-13 in [Complex-valued K-means clustering of interpolative separable density fitting algorithm for large-scale hybrid functional 
     !! enabled ab initio  molecular dynamics simulations within plane waves](https://doi.org/10.48550/arXiv.2208.07731)
@@ -35,7 +36,7 @@ contains
         integer :: n_centroids                             !< Number of  centroids
         integer :: max_cpoints                             !< Upper bound for number of points per centroid
 
-        real(real64), allocatable :: dmatrix(:)            !< Distance matrix |r_ic - r_ir|
+        real(real64)              :: dist, min_dist
         integer,      allocatable :: work_clusters(:, :)   !< Work array for cluster assignment for each grid point (Ncentroids, upper_bound)
 
         n_dims = size(grid_points, 1)
@@ -47,20 +48,24 @@ contains
         ! Allocate a conservative upper bound (could replace with linked list)
         !max_cpoints = int(3 * n_points / n_centroids)
 
-        ! TODO(Alex) Prior max_cpoints estimate is too low when running with MPI, so I've used the 
-        ! maximum number possible
+        ! Prior max_cpoints estimate is too low when running with MPI, so I've used the maximum number possible
+        ! - not optimal!
         max_cpoints = n_points
         allocate(cluster_sizes(n_centroids), source=0)
 
-        ! Work arrays
+        ! Work array
         allocate(work_clusters(max_cpoints, n_centroids))
-        allocate(dmatrix(n_centroids))
 
         do ir = 1, n_points
-            do ic = 1, n_centroids
-                dmatrix(ic) =  norm2(centroids(:, ic) - grid_points(:, ir))
+            icen = 1
+            min_dist = sum((centroids(:, 1) - grid_points(:, ir))**2)
+            do ic = 2, n_centroids
+                dist = sum((centroids(:, ic) - grid_points(:, ir))**2)
+                if (dist < min_dist) then
+                    min_dist = dist
+                    icen = ic
+                endif
             enddo
-            icen = minloc(dmatrix, dim=1)
             ! Track increasing size of each cluster (also acts as an index)
             cluster_sizes(icen) = cluster_sizes(icen) + 1
             ! Assign point ir to the closest centroid
@@ -231,7 +236,7 @@ contains
     !! however it is equivalent to implementations found in packages such as [scikit-learn](https://scikit-learn.org/stable/modules/clustering.html#k-means).
     !!
     !! ## Algorithm Description
-    !! The K-means algorithm consists of looping between the two other steps. 
+    !! The K-means algorithm consists of looping between two steps. 
     !!  1. The first step assigns each sample to its nearest centroid. See `assign_points_to_centroids`
     !!  2. The second step creates new centroids by taking the mean value of all of the samples assigned to each previous centroid. See `update_centroids`
     !! The difference between the old and the new centroids are computed, and the algorithm repeats these last two steps until this value is less than a threshold.
