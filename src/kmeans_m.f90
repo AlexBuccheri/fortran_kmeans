@@ -103,25 +103,32 @@ contains
             error stop 101
         endif
 
-        ! Initialise (use OMP)
+        !$omp parallel default(shared)
+
+        !$omp do simd
         do ic = 1, n_centroids
             centroids(:, ic) = 0._real64
             denominator(ic) = 0._real64
         enddo
 
-        ! Iterate over all grid points (use OMP)
-        ! Initially accumulate the numerator in `centroids`
+        ! Iterate over all grid points
+        !$omp do simd private(ic) reduction(+ : centroids, denominator)
         do ir = 1, nr
             ic = ir_to_ic(ir)
+            ! Initially accumulate the numerator in `centroids`
             centroids(:, ic) = centroids(:, ic) + (grid(:, ir) * weight(ir))
             denominator(ic) = denominator(ic) + weight(ir)
         enddo
+
+        !$omp end parallel
+
 
 #ifdef USE_MPI         
         call MPI_ALLREDUCE(MPI_IN_PLACE, centroids, size(centroids), MPI_DOUBLE_PRECISION, MPI_SUM, comm%comm, comm%ierr)
         call MPI_ALLREDUCE(MPI_IN_PLACE, denominator, size(denominator), MPI_DOUBLE_PRECISION, MPI_SUM, comm%comm, comm%ierr)
 #endif         
 
+        ! Finish defining centroids as numerator / denominator
         do ic = 1, n_centroids
             centroids(:, ic) = centroids(:, ic) / denominator(ic) 
         enddo
