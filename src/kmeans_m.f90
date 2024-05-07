@@ -24,17 +24,15 @@ contains
     !!
     !! See eqs 10-13 in [Complex-valued K-means clustering of interpolative separable density fitting algorithm for large-scale hybrid functional 
     !! enabled ab initio  molecular dynamics simulations within plane waves](https://doi.org/10.48550/arXiv.2208.07731)
-    subroutine assign_points_to_centroids(grid_points, centroids, clusters, cluster_sizes)
-        real(real64), intent(in) :: grid_points(:, :)               !< Real-space grid (n_dims, N)
-        real(real64), intent(in) :: centroids(:, :)                 !< Centroid positions (n_dims, Ncentroids)
-        integer,      intent(out), allocatable :: clusters(:, :)    !< Cluster assignment for each grid point (Ncentroids, max_cpoints)
-        integer,      intent(out), allocatable :: cluster_sizes(:)  !< Keep track of the number of points assigned to each cluster
+    subroutine assign_points_to_centroids(grid_points, centroids, ir_to_ic)
+        real(real64), intent(in)  :: grid_points(:, :)               !< Real-space grid (n_dims, N)
+        real(real64), intent(in)  :: centroids(:, :)                 !< Centroid positions (n_dims, Ncentroids)
+        integer,      intent(out) :: ir_to_ic(:)        !< Index array that maps grid indices to centroid indices
 
         integer :: ir, ic, icen
         integer :: n_dims                                  !< System dimensions
         integer :: n_points                                !< Number of grid points
-        integer :: n_centroids                             !< Number of  centroids
-        integer :: max_cpoints                             !< Upper bound for number of points per centroid
+        integer :: n_centroids                             !< Number of centroids
 
         real(real64)              :: dist, min_dist
         integer,      allocatable :: work_clusters(:, :)   !< Work array for cluster assignment for each grid point (Ncentroids, upper_bound)
@@ -43,18 +41,15 @@ contains
         n_centroids = size(centroids, 2)
         n_points = size(grid_points, 2)
 
-        ! We don't know how many points will be assigned per cluster
-        ! Assuming a uniform distribution, one expects ~ n_points / n_centroids
-        ! Allocate a conservative upper bound (could replace with linked list)
-        !max_cpoints = int(3 * n_points / n_centroids)
+        if (size(centroids, 1) /= n_dims) then
+            write(*, *) 'Size of centroid vector inconsistent with size of grid point vector'
+            error stop 101
+        endif
 
-        ! Prior max_cpoints estimate is too low when running with MPI, so I've used the maximum number possible
-        ! - not optimal!
-        max_cpoints = n_points
-        allocate(cluster_sizes(n_centroids), source=0)
-
-        ! Work array
-        allocate(work_clusters(max_cpoints, n_centroids))
+        if (size(ir_to_ic) /= n_points) then
+            write(*, *) 'Size of ir_to_ic map inconsistent with number of grid points'
+            error stop 102
+        endif
 
         do ir = 1, n_points
             icen = 1
@@ -66,18 +61,11 @@ contains
                     icen = ic
                 endif
             enddo
-            ! Track increasing size of each cluster (also acts as an index)
-            cluster_sizes(icen) = cluster_sizes(icen) + 1
-            ! Assign point ir to the closest centroid
-            work_clusters(cluster_sizes(icen), icen) = ir
+            ir_to_ic(ir) = icen
         enddo 
         
-        ! Resize. Note, there will still be redundant memory, hence we require cluster_sizes
-        max_cpoints = maxval(cluster_sizes)
-        allocate(clusters(max_cpoints, n_centroids), source=work_clusters(1: max_cpoints, 1: n_centroids))
-
     end subroutine assign_points_to_centroids
-    
+
 
     !> @brief Compute a new set of centroids.
     !!
@@ -86,44 +74,47 @@ contains
     !!    \mathbf{r}_\mu = \frac{\sum_{\mathbf{r}_j \in C_\mu} \mathbf{r}_j w(\mathbf{r}_j)}{\sum_{\mathbf{r}_j \in C_\mu} w(\mathbf{r}_j)}
     !! \f]
     !! where \f$\mathbf{r}_j\f$ and \f$w(\mathbf{r}_j\f$ are grid points and weights restricted to the cluster \f$ C_\mu \f$, respectively.
-    subroutine update_centroids(comm, grid, weight, clusters, cluster_sizes, centroids)
+    subroutine update_centroids(comm, grid, weight, ir_to_ic, centroids)
 #ifdef USE_MPI          
         use mpi, only: MPI_DOUBLE_PRECISION, MPI_SUM, MPI_ALLREDUCE, MPI_IN_PLACE
 #endif 
         type(mpi_t),  intent(inout) :: comm                     !< MPI instance
         real(real64), intent(in)    :: grid(:, :)               !< Real-space grid (n_dims, N)
         real(real64), intent(in)    :: weight(:)                !< Weights (N)
-        integer,      intent(in)    :: clusters(:, :)           !< Cluster assignment for each grid point (max_cpoints, Ncentroids)
-        integer,      intent(in)    :: cluster_sizes(:)         !< Keep track of the number of points assigned to each cluster
+        integer,      intent(in)    :: ir_to_ic(:)              !< Map grid indices to centroid indices (N)
         
         real(real64), intent(inout) :: centroids(:, :)          !< In: centroid positions (n_dims, Ncentroids)
         !                                                         Out: Updated centroid positions
         
-        integer                   :: n_dims, n_centroids, icen, j, ir
+        integer                   :: n_dims, nr, n_centroids, ir, ic
         real(real64), allocatable :: denominator(:)
 
         n_dims = size(grid, 1)
-        n_centroids = size(cluster_sizes)
+        nr = size(grid, 2)
+
+        n_centroids = size(centroids, 2)
         allocate(denominator(n_centroids))
 
         ! The indexing of weight and grid must be consistent => must have the same distribution
         ! or there must be a local-to-global index map (which clearly I am not using)
-        if (size(grid, 2) /= size(weight)) then
+        if (size(weight) /= nr) then
             write(*, *) "The number of grid points /= weight. This might indicate that their distributions &
             & differ, hence the indexing will not be consistent"
             error stop 101
         endif
 
-        do icen = 1, n_centroids
-            centroids(:, icen) = 0._real64
-            denominator(icen) = 0._real64
-            ! Iterate over all points in current centroid
-            do j = 1, cluster_sizes(icen)
-                ir = clusters(j, icen)
-                ! Initially accumulate the numerator in `centroids`
-                centroids(:, icen) = centroids(:, icen) + (grid(:, ir) * weight(ir))
-                denominator(icen) = denominator(icen) + weight(ir)
-            enddo
+        ! Initialise (use OMP)
+        do ic = 1, n_centroids
+            centroids(:, ic) = 0._real64
+            denominator(ic) = 0._real64
+        enddo
+
+        ! Iterate over all grid points (use OMP)
+        ! Initially accumulate the numerator in `centroids`
+        do ir = 1, nr
+            ic = ir_to_ic(ir)
+            centroids(:, ic) = centroids(:, ic) + (grid(:, ir) * weight(ir))
+            denominator(ic) = denominator(ic) + weight(ir)
         enddo
 
 #ifdef USE_MPI         
@@ -131,38 +122,13 @@ contains
         call MPI_ALLREDUCE(MPI_IN_PLACE, denominator, size(denominator), MPI_DOUBLE_PRECISION, MPI_SUM, comm%comm, comm%ierr)
 #endif         
 
-        do icen = 1, n_centroids
-            centroids(:, icen) = centroids(:, icen) / denominator(icen) 
+        do ic = 1, n_centroids
+            centroids(:, ic) = centroids(:, ic) / denominator(ic) 
         enddo
 
     end subroutine update_centroids
 
-        ! A look at how one might implement the above with OMP
-        ! Causes the regression test to crash, and I can't see what the problem is
-        ! allocate(local_centroid(n_dims))
-        ! !$omp parallel default(shared) private(numerator, denominator) shared(local_centroid, centroids)
-        ! do icen = 1, n_centroids
-        !     numerator = 0._real64
-        !     denominator = 0._real64
-
-        !     ! Iterate over all points in current centroid
-        !     !$omp do private(ir)
-        !     do j = 1, cluster_sizes(icen)
-        !         ir = clusters(j, icen)
-        !         numerator(:) = numerator(:) + (grid(:, ir) * weight(ir))
-        !         denominator = denominator + weight(ir)
-        !     enddo
-        !     !$omp end do
-
-        !     !$OMP CRITICAL
-        !         local_centroid(:) = local_centroid(:) + (numerator(:) / denominator)
-        !         centroids(:, icen) = local_centroid(:)
-        !     !$OMP END CRITICAL
     
-        ! enddo
-        ! !$omp end parallel
-
-
     !> @brief Compute the difference in two grids as abs(\mathbf{g}_1 - \mathbf{g}_2).
     !!
     !! If an component of the difference vector for grid point i is greater than
@@ -254,7 +220,7 @@ contains
         integer          :: n_iterations, nr, n_dim, n_centroid, i
         real(real64)     :: tol
 
-        integer,      allocatable :: clusters(:, :), cluster_sizes(:)
+        integer,      allocatable :: ir_to_ic(:)
         real(real64), allocatable :: prior_centroids(:, :)
         logical,      allocatable :: points_differ(:)
 
@@ -288,14 +254,13 @@ contains
 
         ! Work arrays
         allocate(prior_centroids(n_dim, size(centroids, 2)), source=centroids)
-        allocate(cluster_sizes(n_centroid))
-        allocate(clusters(n_dim, n_centroid))
+        allocate(ir_to_ic(nr))
         allocate(points_differ(n_centroid))
 
         do i = 1, n_iterations
             if (print_out) write(*, *) 'Iteration ', i
-            call assign_points_to_centroids(grid, centroids, clusters, cluster_sizes)
-            call update_centroids(comm, grid, weight, clusters, cluster_sizes, centroids)
+            call assign_points_to_centroids(grid, centroids, ir_to_ic)
+            call update_centroids(comm, grid, weight, ir_to_ic, centroids)
             call compute_grid_difference(prior_centroids, centroids, tol, points_differ)
             if (any(points_differ)) then
                 if (print_out) call report_differences_in_grids(prior_centroids, centroids, tol, points_differ)
