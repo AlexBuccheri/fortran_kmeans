@@ -238,4 +238,85 @@ contains
 
     end subroutine generate_gaussian
 
+
+    ! Serial reference
+    subroutine discretise_values_to_grid_serial(values, grid)
+        real(real64), intent(inout) :: values(:, :)  !< In: Continuous values  (n_dim, M) 
+        !                                               Out: Discretised values (n_dim, M) 
+        real(real64), intent(in) :: grid(:, :)        !< Discrete grid (n_dim, Nr)
+        
+        integer :: ir, iv, nr, iopt, n_dim
+        real(real64) :: norm, new_norm
+        real(real64), allocatable :: val(:)
+
+        n_dim = size(grid, 1)
+        nr = size(grid, 2)
+        allocate(val(n_dim))
+
+        do iv = 1, size(values, 2)
+            val = values(:, iv)
+            ! Initialise 
+            norm = sum((grid(:, 1) - val(:))**2)
+            iopt = -1
+            do ir = 2, nr
+                new_norm = sum((grid(:, 1) - val(:))**2)
+                if (new_norm < norm) then
+                    norm = new_norm
+                    iopt = ir
+                endif
+            enddo
+            values(:, iopt) = grid(:, iopt)
+        enddo
+
+    end subroutine discretise_values_to_grid_serial
+
+
+    ! For parallel, one should work with the integer representation of the grid, not the real.
+    ! Better than suggestion below. Simpler than k-d tree search.
+
+    ! !> @brief Given a set of values that span the range of a grid, 
+    ! !! assign each value to the nearest, discrete grid point.
+
+    ! !! Proper approach: Parallelised k-d tree search, but I'm not going to partition
+    ! !! the grid up according to this. Particularly as this ultimately needs to work with metis
+    ! !! (not clear that my idea will)
+    ! !!
+    ! !! Outline of my idea:
+    ! !! a) Approximate or exactly compute min_norm per process
+    ! !!   If approximate, one does so on a random sampling of points
+    ! !!   Store mni_norm(1:Nv)
+    ! !! b) Return process of min_norm for each iv
+    ! !!   So what one wants is a subset of the global iv indices associated with each process
+    ! !! c) Compute the min_norm for that process and take it to be the global minimum
+    ! !!    - Store associated grid points
+    ! !! d) allgatherv the grid points for discretised values
+
+    ! subroutine discretise_values_to_grid_mpi(comm, values, grid)
+    !     real(real64), intent(inout), :: values(:, :)  !< In: Continuous values  (n_dim, M) 
+    !     !                                               Out: Discretised values (n_dim, M) 
+    !     real(real64), intent(in) :: grid(:, :)        !< Discrete grid (n_dim, Nr)
+
+    !     integer :: n_dim, nr, ir, iv
+    !     real(real64) :: tmp_norm
+    !     real(real64), allocatable :: val(:)
+
+    !     n_dim = size(grid, 1)
+    !     nr = size(grid, 2)
+    !     allocate(val(n_dim))
+
+    !     ! a) Compute min_norm for each value, using either all of the subgrid, 
+    !     ! or random sampling of the subgrid 
+    !     ! Could colapse this with OMP
+    !     do iv = 1, size(values, 2)
+    !         ! val = values(:, iv)
+    !         do ir = 1, nr
+    !             min_norm(i) = norm2(grid(:, ir) - values(:, i))
+    !         enddo
+    !     enddo
+
+    !     ! b) For each process, store the iv of min_norm(iv) that are minimised over all processes
+    ! NOT FINISHED
+
+    ! end subroutine discretise_values_to_grid_mpi
+
 end module grids_m
