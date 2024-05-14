@@ -7,8 +7,13 @@ CMake configure, build and test commands:
 ```shell
 cmake --fresh -B serial-cmake-build-debug -DCMAKE_BUILD_TYPE=Debug -DMPI=Off
 cmake --build serial-cmake-build-debug
-ctest --test-dir ./serial-cmake-build-debug --output-on-failure --verbose
+ctest --test-dir ./serial-cmake-build-debug --output-on-failure
 ```
+
+ctest args:
+* `--show-only`   List all tests
+* `--verbose`     Always write to stdout
+
 
 Run the application test with:
 
@@ -44,6 +49,8 @@ Run the application test with:
 ```shell
 mpirun -np 4 cmake-build-debug/run_kmeans
 ```
+
+or have the notebook execute it.
 
 Fortuno is available [here](https://github.com/fortuno-repos/fortuno)
 
