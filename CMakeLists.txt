@@ -4,10 +4,11 @@ project(libkmeans LANGUAGES Fortran)
 
 set(CMAKE_Fortran_MODULE_DIRECTORY ${PROJECT_BINARY_DIR}/modules)
 
-# Note, flags "should" be specified in yaml presets, and passed to cmake as arguments
 # Compiler flags for GCC only
+# Note, flags "should" be specified in yaml presets, and passed to cmake as arguments
+# Use c-preprocessor. Note, probably better to set target property `Fortran_PREPROCESS` instead
 set(GCC_BASE 
-   -cpp       # Use c-preprocessor. Note, probably better to set target property `Fortran_PREPROCESS` instead
+   -cpp       
    )
 
 set(GCC_DEBUG
@@ -41,10 +42,8 @@ add_library(common_options INTERFACE)
 
 # Build-specific flags
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-set(MY_COMPILER_FLAGS "-Wall" "-Wextra")
-message("Flags: ${GCC_DEBUG}")
    target_compile_options(common_flags INTERFACE ${GCC_BASE} ${GCC_DEBUG})
-   elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
    target_compile_options(common_flags INTERFACE ${GCC_BASE} ${GCC_RELEASE})
 endif()
 
@@ -87,8 +86,9 @@ if(MPI)
 else()
    set(MPI_Fortran_LIBRARIES "")
    message("-- Not using MPI")
+   # Create an empty target with the same name
+   add_library(MPI::MPI_Fortran INTERFACE IMPORTED)
 endif()
-
 
 
 # This library
@@ -145,19 +145,19 @@ enable_testing()
 # Grids module
 add_executable(test_grids tests/test_grids_m.f90)
 target_link_libraries(test_grids PRIVATE lib_kmeans fortuno_wrapper common_flags common_options) 
-add_test(NAME test_generate_real_space_grid_1D COMMAND test_grids)
-add_test(NAME test_generate_real_space_grid_2D COMMAND test_grids)
-add_test(NAME test_generate_real_space_grid_3D COMMAND test_grids)
-add_test(NAME test_linspace COMMAND test_grids)
-add_test(NAME test_linspace_to_grid2d COMMAND test_grids)
-add_test(NAME test_generate_gaussian_2d COMMAND test_grids)
+add_test(NAME test_generate_real_space_grid_1D COMMAND test_grids "Real-space 1D grid")
+add_test(NAME test_generate_real_space_grid_2D COMMAND test_grids "Real-space 2D grid")
+add_test(NAME test_generate_real_space_grid_3D COMMAND test_grids "Real-space 3D grid")
+add_test(NAME test_linspace COMMAND test_grids "Linear spaced sampling")
+add_test(NAME test_linspace_to_grid2d COMMAND test_grids "2D linear grid")
+add_test(NAME test_generate_gaussian_2d COMMAND test_grids "2D Gaussian")
 
 # k-means module
 add_executable(test_kmeans tests/test_kmeans_m.F90)
 target_link_libraries(test_kmeans PRIVATE lib_kmeans fortuno_wrapper common_flags common_options) 
-add_test(NAME test_assign_points_to_centroids COMMAND test_kmeans)
-add_test(NAME test_update_centroids_no_movement COMMAND test_kmeans)
-add_test(NAME test_points_are_converged COMMAND test_kmeans)
+add_test(NAME test_assign_points_to_centroids COMMAND test_kmeans "Assign points to centroids")
+add_test(NAME test_update_centroids_no_movement COMMAND test_kmeans "Update centroids - no change")
+add_test(NAME test_points_are_converged COMMAND test_kmeans "Difference in two sets of points")
 
 
 # Installation
