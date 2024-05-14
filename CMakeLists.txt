@@ -118,7 +118,7 @@ target_sources(lib_kmeans PUBLIC
        )
 
 # Fortuno wrapper layer
-add_library(fortuno_wrapper "")
+add_library(fortuno_wrapper OBJECT "")
 set_target_properties(fortuno_wrapper
         PROPERTIES
         VERSION 0.0.1
