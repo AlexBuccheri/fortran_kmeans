@@ -2,9 +2,6 @@ cmake_minimum_required(VERSION 3.20)
 
 project(libkmeans LANGUAGES Fortran)
 
-# Build directory
-set(CMAKE_Fortran_BIN_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
-set(CMAKE_Fortran_LIB_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 set(CMAKE_Fortran_MODULE_DIRECTORY ${PROJECT_BINARY_DIR}/modules)
 
 # Compiler flags for GCC only
@@ -60,11 +57,7 @@ add_library(common_options INTERFACE)
 option(MPI "Use MPI" ON)
 if(MPI)
    message("-- Using MPI")
-
-   # Find MPI library and headers
    find_package(MPI REQUIRED)
-   add_definitions(${MPI_Fortran_COMPILE_FLAGS})
-   include_directories(${MPI_Fortran_INCLUDE_PATH})
 
    # Fetch and assign fortuno MPI lib
    FetchContent_Declare(
@@ -96,13 +89,13 @@ set_target_properties(lib_kmeans
         PROPERTIES
         VERSION 0.0.1
         SOVERSION 0.0.1
-        LIBRARY_OUTPUT_NAME intmpi
+        LIBRARY_OUTPUT_NAME kmeans
         ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_Fortran_LIB_DIRECTORY}
         LIBRARY_OUTPUT_DIRECTORY ${CMAKE_Fortran_LIB_DIRECTORY}
         )
 
 # Linked libraries
-target_link_libraries(lib_kmeans PRIVATE OpenMP::OpenMP_Fortran ${MPI_Fortran_LIBRARIES} common_options)  # BLAS::BLAS 
+target_link_libraries(lib_kmeans PRIVATE OpenMP::OpenMP_Fortran MPI::MPI_Fortran common_options)  # BLAS::BLAS 
 
 # Source code
 target_sources(lib_kmeans PUBLIC
@@ -118,11 +111,11 @@ set_target_properties(fortuno_wrapper
         PROPERTIES
         VERSION 0.0.1
         SOVERSION 0.0.1
-        LIBRARY_OUTPUT_NAME intmpi
+        LIBRARY_OUTPUT_NAME fortunow
         ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_Fortran_LIB_DIRECTORY}
         LIBRARY_OUTPUT_DIRECTORY ${CMAKE_Fortran_LIB_DIRECTORY}
         )
-target_link_libraries(fortuno_wrapper PUBLIC ${fortuno_libs} ${MPI_Fortran_LIBRARIES})
+target_link_libraries(fortuno_wrapper PUBLIC ${fortuno_libs} MPI::MPI_Fortran)
 target_sources(fortuno_wrapper PRIVATE
        src/fortuno_interface_m.F90
        )
@@ -132,7 +125,7 @@ target_sources(fortuno_wrapper PRIVATE
 
 # Testing program
 add_executable(run_kmeans run.f90)
-target_link_libraries(run_kmeans PRIVATE lib_kmeans OpenMP::OpenMP_Fortran ${MPI_Fortran_LIBRARIES} common_options) 
+target_link_libraries(run_kmeans PRIVATE lib_kmeans OpenMP::OpenMP_Fortran MPI::MPI_Fortran common_options) 
 
 # Library unit tests
 enable_testing()
@@ -153,3 +146,15 @@ target_link_libraries(test_kmeans PRIVATE lib_kmeans fortuno_wrapper common_opti
 add_test(NAME test_assign_points_to_centroids COMMAND test_kmeans)
 add_test(NAME test_update_centroids_no_movement COMMAND test_kmeans)
 add_test(NAME test_points_are_converged COMMAND test_kmeans)
+
+
+# Installation
+# --------------------------------
+
+# Populate `kmeans.pc.in` template with cmake variables, to generate pkg-config file
+# configure_file(cmake/kmeans.pc.in kmeans.pc @ONLY)
+# install(
+#    FILES ${CMAKE_CURRENT_BINARY_DIR}/kmeans.pc
+#    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
+#    COMPONENT Fortuno_development
+#  )
