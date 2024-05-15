@@ -1,0 +1,11 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(OpenMP REQUIRED)
+find_dependency(MPI)
+# Include the Targets file to bring in the exported targets
+include(@CMAKE_INSTALL_PREFIX@/@CMAKE_INSTALL_LIBDIR@/cmake/kmeans/KmeansTargets.cmake)
+
+set(kmeans_VERSION @PROJECT_VERSION@)
+set(kmeans_LIBRARIES kmeans::lib_kmeans)
+set(kmeans_INCLUDE_DIRS @CMAKE_INSTALL_PREFIX@/modules)

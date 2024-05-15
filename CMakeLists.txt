@@ -15,8 +15,9 @@ set(CMAKE_Fortran_MODULE_DIRECTORY ${PROJECT_BINARY_DIR}/modules)
 # Load and execute CMake code from provided modules
 include(GNUInstallDirs)
 include(FetchContent)
+
 # Add custom modules in cmake/
-#list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
 #[==============================================================================================[
 #                        Compiler Flags and Options                                             #
@@ -105,12 +106,19 @@ add_library(fortuno_wrapper OBJECT)
 add_subdirectory(src)
 
 set_target_properties(lib_kmeans PROPERTIES
-    VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}"
+    VERSION "${PROJECT_VERSION}"
     SOVERSION "${PROJECT_VERSION_MAJOR}"
     LIBRARY_OUTPUT_NAME "kmeans"
     # ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}" Not specified as will default to the GnuInstallDir
     LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
 )
+
+# Set where to look for module files during compilation
+# Specifies how downstream projects consume `lib_kmeans`
+target_include_directories(lib_kmeans PUBLIC
+        "$<BUILD_INTERFACE:${CMAKE_Fortran_MODULE_DIRECTORY}>"
+        "$<INSTALL_INTERFACE:modules>"    # Install-time path, relative to CMAKE_INSTALL_PREFIX
+        )
 
 # Linked libraries
 target_link_libraries(lib_kmeans PRIVATE 
@@ -119,13 +127,8 @@ target_link_libraries(lib_kmeans PRIVATE
    common_flags 
    )
 
-# target_include_directories(lib_kmeans PUBLIC
-#         "$<BUILD_INTERFACE:${CMAKE_Fortran_MODULE_DIRECTORY}>"
-#         "$<INSTALL_INTERFACE:${CMAKE_INSTALL_MODULEDIR}>"  #Note, I'm not using this variable below
-# )
-
 set_target_properties(fortuno_wrapper PROPERTIES
-        VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}"
+        VERSION "${PROJECT_VERSION}"
         SOVERSION "${PROJECT_VERSION_MAJOR}"
         LIBRARY_OUTPUT_NAME fortunow
         LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
@@ -205,14 +208,19 @@ export(TARGETS lib_kmeans
 
 # cmake export files
 include(CMakePackageConfigHelpers)
-write_basic_package_version_file(
+
+configure_package_config_file(cmake/kmeansConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/kmeansConfig.cmake"
+                               INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/kmeans")
+
+write_basic_package_version_file( 
     "${CMAKE_CURRENT_BINARY_DIR}/kmeansConfigVersion.cmake"
-    VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}
+    VERSION ${PROJECT_VERSION}
     COMPATIBILITY AnyNewerVersion
 )
 install(
     FILES
         "${CMAKE_CURRENT_BINARY_DIR}/kmeansConfigVersion.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/kmeansConfig.cmake"
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/kmeans"
 )
 
@@ -224,7 +232,12 @@ install(
 # pkg-config file
 # Populate `kmeans.pc.in` template with cmake variables
 # Would need to chain configure_file (replaces @@) -> file(GENERATE) (replaces genex $<>)
-# to use Crisitian's suggestion
+# to use Crisitian's suggestion:
+# configure_file(cmake/kmeans.pc.in.in kmeans.pc.in @ONLY)
+# file(GENERATE OUTPUT kmeans.pc
+#     INPUT ${CMAKE_CURRENT_BINARY_DIR}/kmeans.pc.in
+# )
+# Else:
 # configure_file(cmake/kmeans.pc.in kmeans.pc @ONLY)
 # install(
 #    FILES ${CMAKE_CURRENT_BINARY_DIR}/kmeans.pc
