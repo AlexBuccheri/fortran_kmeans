@@ -4,13 +4,8 @@ project(libkmeans LANGUAGES Fortran)
 
 set(CMAKE_Fortran_MODULE_DIRECTORY ${PROJECT_BINARY_DIR}/modules)
 
-# Compiler flags for GCC only
-# Note, flags "should" be specified in yaml presets, and passed to cmake as arguments
-# Use c-preprocessor. Note, probably better to set target property `Fortran_PREPROCESS` instead
-set(GCC_BASE 
-   -cpp       
-   )
-
+# Note, flags "should" be specified in cmake presets
+# Gfortran flags
 set(GCC_DEBUG
      -O0                                          # 0 optimisation. Probably implicit
      -fbacktrace                                  # symbolic stack traceback
@@ -28,25 +23,18 @@ set(GCC_RELEASE
 # list(JOIN GCC_BASE " " GCC_BASE)
 # set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${GCC_BASE}")  
 
-# When using an interface target to assign compiler flags (or options), one requires a semicolon-separated string
-# which is == strings appended to a list
-# Convert the space-separated string into a semicolon-separated string
-string(REPLACE " " ";" GCC_BASE "${GCC_BASE}")
-string(REPLACE " " ";" GCC_DEBUG "${GCC_DEBUG}")
-string(REPLACE " " ";" GCC_RELEASE "${GCC_RELEASE}")
-
-# Interface to control scope of compiler flags
+# Interface to control scope of compiler flags and options
 add_library(common_flags INTERFACE)
-# Control the scope of compiler options
-add_library(common_options INTERFACE)
+
+# Generator expressions
+# $<CONFIG:Release> converts to 0 or 1
+# $<bool_value:some string> expands some string "if bool_value == true"
 
 # Build-specific flags
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-   target_compile_options(common_flags INTERFACE ${GCC_BASE} ${GCC_DEBUG})
-elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-   target_compile_options(common_flags INTERFACE ${GCC_BASE} ${GCC_RELEASE})
-endif()
-
+target_compile_options(common_flags INTERFACE 
+   $<$<AND:$<CONFIG:Debug>,$<Fortran_COMPILER_ID:GNU>>:${GCC_DEBUG}>
+   $<$<AND:$<CONFIG:Release>,$<Fortran_COMPILER_ID:GNU>>:${GCC_RELEASE}>
+   )
 
 # External dependencies
 # ---------------------------------
@@ -64,11 +52,10 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(Fortuno)
 set(fortuno_libs Fortuno::fortuno_serial)
 
-
 # MPI-dependent settings
 option(MPI "Use MPI" ON)
 if(MPI)
-   find_package(MPI REQUIRED)
+   find_package(MPI REQUIRED Fortran)
 
    # Fetch and assign fortuno MPI lib
    FetchContent_Declare(
@@ -81,70 +68,71 @@ if(MPI)
 
    # Set preprocessor variable 
    # add_compile_definitions(USE_MPI=1)
-   target_compile_definitions(common_options INTERFACE USE_MPI)
+   target_compile_definitions(common_flags INTERFACE USE_MPI)
 
 else()
-   set(MPI_Fortran_LIBRARIES "")
    message("-- Not using MPI")
-   # Create an empty target with the same name
-   add_library(MPI::MPI_Fortran INTERFACE IMPORTED)
 endif()
-
 
 # This library
 # -----------------------------
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 
+# Define libraries
 add_library(lib_kmeans "")
+add_library(fortuno_wrapper OBJECT "")
+
+# Location of source - added after defining library variables,
+# as they're referenced in the source-level CMakeLists.txt
+add_subdirectory(src)
 
 set_target_properties(lib_kmeans
         PROPERTIES
-        VERSION 0.0.1
-        SOVERSION 0.0.1
+        VERSION ${libkmeans_VERSION} 
+        SOVERSION ${libkmeans_VERSION_MAJOR}  
         LIBRARY_OUTPUT_NAME kmeans
-        ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_Fortran_LIB_DIRECTORY}
-        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_Fortran_LIB_DIRECTORY}
+        ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
+        LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
         )
 
 # Linked libraries
-target_link_libraries(lib_kmeans PRIVATE OpenMP::OpenMP_Fortran MPI::MPI_Fortran common_flags common_options)
+target_link_libraries(lib_kmeans PRIVATE 
+   OpenMP::OpenMP_Fortran 
+   $<$<BOOL:${MPI}>:MPI::MPI_Fortran> 
+   common_flags 
+   )
 
-# Source code
-target_sources(lib_kmeans PUBLIC
-       src/kmeans_m.F90
-       src/grids_m.f90
-       src/maths_m.f90
-       src/mpi_m.F90
-       )
-
-# Fortuno wrapper layer
-add_library(fortuno_wrapper OBJECT "")
 set_target_properties(fortuno_wrapper
         PROPERTIES
-        VERSION 0.0.1
-        SOVERSION 0.0.1
+        VERSION ${libkmeans_VERSION} 
+        SOVERSION ${libkmeans_VERSION_MAJOR}  
         LIBRARY_OUTPUT_NAME fortunow
-        ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_Fortran_LIB_DIRECTORY}
-        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_Fortran_LIB_DIRECTORY}
+        ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
+        LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
         )
-target_link_libraries(fortuno_wrapper PUBLIC ${fortuno_libs} MPI::MPI_Fortran)
-target_sources(fortuno_wrapper PRIVATE
-       src/fortuno_interface_m.F90
-       )
+
+target_link_libraries(fortuno_wrapper PUBLIC 
+   ${fortuno_libs} 
+   $<$<BOOL:${MPI}>:MPI::MPI_Fortran>
+   )
 
 # Testing
 # -------------------------------
 
 # Testing program
 add_executable(run_kmeans run.f90)
-target_link_libraries(run_kmeans PRIVATE lib_kmeans OpenMP::OpenMP_Fortran MPI::MPI_Fortran common_flags common_options) 
+target_link_libraries(run_kmeans PRIVATE 
+   lib_kmeans 
+   OpenMP::OpenMP_Fortran 
+   $<$<BOOL:${MPI}>:MPI::MPI_Fortran>  
+   common_flags) 
 
 # Library unit tests
 enable_testing()
 
 # Grids module
 add_executable(test_grids tests/test_grids_m.f90)
-target_link_libraries(test_grids PRIVATE lib_kmeans fortuno_wrapper common_flags common_options) 
+target_link_libraries(test_grids PRIVATE lib_kmeans fortuno_wrapper common_flags) 
 add_test(NAME test_generate_real_space_grid_1D COMMAND test_grids "Real-space 1D grid")
 add_test(NAME test_generate_real_space_grid_2D COMMAND test_grids "Real-space 2D grid")
 add_test(NAME test_generate_real_space_grid_3D COMMAND test_grids "Real-space 3D grid")
@@ -154,19 +142,7 @@ add_test(NAME test_generate_gaussian_2d COMMAND test_grids "2D Gaussian")
 
 # k-means module
 add_executable(test_kmeans tests/test_kmeans_m.F90)
-target_link_libraries(test_kmeans PRIVATE lib_kmeans fortuno_wrapper common_flags common_options) 
+target_link_libraries(test_kmeans PRIVATE lib_kmeans fortuno_wrapper common_flags) 
 add_test(NAME test_assign_points_to_centroids COMMAND test_kmeans "Assign points to centroids")
 add_test(NAME test_update_centroids_no_movement COMMAND test_kmeans "Update centroids - no change")
 add_test(NAME test_points_are_converged COMMAND test_kmeans "Difference in two sets of points")
-
-
-# Installation
-# --------------------------------
-
-# Populate `kmeans.pc.in` template with cmake variables, to generate pkg-config file
-# configure_file(cmake/kmeans.pc.in kmeans.pc @ONLY)
-# install(
-#    FILES ${CMAKE_CURRENT_BINARY_DIR}/kmeans.pc
-#    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
-#    COMPONENT Fortuno_development
-#  )
