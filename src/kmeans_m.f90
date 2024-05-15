@@ -25,17 +25,15 @@ contains
     !! See eqs 10-13 in [Complex-valued K-means clustering of interpolative separable density fitting algorithm for large-scale hybrid functional 
     !! enabled ab initio  molecular dynamics simulations within plane waves](https://doi.org/10.48550/arXiv.2208.07731)
     subroutine assign_points_to_centroids(grid_points, centroids, ir_to_ic)
-        real(real64), intent(in)  :: grid_points(:, :)               !< Real-space grid (n_dims, N)
-        real(real64), intent(in)  :: centroids(:, :)                 !< Centroid positions (n_dims, Ncentroids)
-        integer,      intent(out) :: ir_to_ic(:)        !< Index array that maps grid indices to centroid indices
+        real(real64), intent(in)  :: grid_points(:, :)     !< Real-space grid (n_dims, N)
+        real(real64), intent(in)  :: centroids(:, :)       !< Centroid positions (n_dims, Ncentroids)
+        integer,      intent(out) :: ir_to_ic(:)           !< Index array that maps grid indices to centroid indices
 
         integer :: ir, ic, icen
         integer :: n_dims                                  !< System dimensions
         integer :: n_points                                !< Number of grid points
         integer :: n_centroids                             !< Number of centroids
-
-        real(real64)              :: dist, min_dist
-        integer,      allocatable :: work_clusters(:, :)   !< Work array for cluster assignment for each grid point (Ncentroids, upper_bound)
+        real(real64) :: dist, min_dist
 
         n_dims = size(grid_points, 1)
         n_centroids = size(centroids, 2)
@@ -87,6 +85,7 @@ contains
         !                                                         Out: Updated centroid positions
         
         integer                   :: n_dims, nr, n_centroids, ir, ic
+        real(real64)              :: tmp
         real(real64), allocatable :: denominator(:)
 
         n_dims = size(grid, 1)
@@ -122,16 +121,18 @@ contains
 
         !$omp end parallel
 
-
 #ifdef USE_MPI         
         call MPI_ALLREDUCE(MPI_IN_PLACE, centroids, size(centroids), MPI_DOUBLE_PRECISION, MPI_SUM, comm%comm, comm%ierr)
         call MPI_ALLREDUCE(MPI_IN_PLACE, denominator, size(denominator), MPI_DOUBLE_PRECISION, MPI_SUM, comm%comm, comm%ierr)
 #endif         
 
         ! Finish defining centroids as numerator / denominator
+        !$omp parallel do simd private(tmp) reduction(* : centroids)
         do ic = 1, n_centroids
-            centroids(:, ic) = centroids(:, ic) / denominator(ic) 
+            tmp = 1._real64 / denominator(ic)
+            centroids(:, ic) = centroids(:, ic) * tmp
         enddo
+        !$omp end parallel do simd
 
     end subroutine update_centroids
 
