@@ -14,6 +14,12 @@ ctest args:
 * `--show-only`   List all tests
 * `--verbose`     Always write to stdout
 
+Install:
+```shell
+cmake --fresh -B serial-cmake-build-debug -DCMAKE_BUILD_TYPE=Debug -DMPI=Off -DCMAKE_INSTALL_PREFIX=/Users/alexanderbuccheri/Codes/kmeans/install
+cmake --build serial-cmake-build-debug
+cmake --install serial-cmake-build-debug
+```
 
 Run the application test with:
 

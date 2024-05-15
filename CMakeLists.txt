@@ -2,7 +2,14 @@ cmake_minimum_required(VERSION 3.20)
 
 project(libkmeans LANGUAGES Fortran)
 
-set(CMAKE_Fortran_MODULE_DIRECTORY ${PROJECT_BINARY_DIR}/modules)
+# Note, this could also be stored in version text: configure_file(version.txt.in version.txt)
+# or dynamically extracted from git tags
+set(libkmeans_VERSION_MAJOR 1)
+set(libkmeans_VERSION_MINOR 0)
+set(libkmeans_VERSION_PATCH 0)
+
+list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+include(GNUInstallDirs)
 
 # Note, flags "should" be specified in cmake presets
 # Gfortran flags
@@ -79,21 +86,23 @@ endif()
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 
 # Define libraries
-add_library(lib_kmeans "")
-add_library(fortuno_wrapper OBJECT "")
+add_library(lib_kmeans)
+add_library(fortuno_wrapper OBJECT)
 
 # Location of source - added after defining library variables,
 # as they're referenced in the source-level CMakeLists.txt
+# target_include_directories(lib_kmeans PUBLIC src) 
+# target_include_directories(fortuno_wrapper PUBLIC src) 
 add_subdirectory(src)
 
-set_target_properties(lib_kmeans
-        PROPERTIES
-        VERSION ${libkmeans_VERSION} 
-        SOVERSION ${libkmeans_VERSION_MAJOR}  
-        LIBRARY_OUTPUT_NAME kmeans
-        ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
-        LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
-        )
+set_target_properties(lib_kmeans PROPERTIES
+    VERSION "${libkmeans_VERSION_MAJOR}.${libkmeans_VERSION_MINOR}.${libkmeans_VERSION_PATCH}"
+    SOVERSION "${libkmeans_VERSION_MAJOR}"
+    LIBRARY_OUTPUT_NAME "kmeans"
+    ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
+    Fortran_MODULE_DIRECTORY "${CMAKE_Fortran_MODULE_DIRECTORY}"
+)
 
 # Linked libraries
 target_link_libraries(lib_kmeans PRIVATE 
@@ -102,13 +111,12 @@ target_link_libraries(lib_kmeans PRIVATE
    common_flags 
    )
 
-set_target_properties(fortuno_wrapper
-        PROPERTIES
-        VERSION ${libkmeans_VERSION} 
-        SOVERSION ${libkmeans_VERSION_MAJOR}  
+set_target_properties(fortuno_wrapper PROPERTIES
+        VERSION "${libkmeans_VERSION_MAJOR}.${libkmeans_VERSION_MINOR}.${libkmeans_VERSION_PATCH}"
+        SOVERSION "${libkmeans_VERSION_MAJOR}"
         LIBRARY_OUTPUT_NAME fortunow
-        ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
-        LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
+        ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
+        LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
         )
 
 target_link_libraries(fortuno_wrapper PUBLIC 
@@ -146,3 +154,58 @@ target_link_libraries(test_kmeans PRIVATE lib_kmeans fortuno_wrapper common_flag
 add_test(NAME test_assign_points_to_centroids COMMAND test_kmeans "Assign points to centroids")
 add_test(NAME test_update_centroids_no_movement COMMAND test_kmeans "Update centroids - no change")
 add_test(NAME test_points_are_converged COMMAND test_kmeans "Difference in two sets of points")
+
+# Installation
+# --------------------------------
+
+# Library
+install(
+   TARGETS lib_kmeans
+   EXPORT KmeansTargets
+   LIBRARY
+     DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+   ARCHIVE
+     DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+ )
+
+install(EXPORT KmeansTargets
+   FILE KmeansTargets.cmake
+   NAMESPACE kmeans::
+   DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/kmeans"
+   )
+
+# Module files.
+install(
+   DIRECTORY ${CMAKE_Fortran_MODULE_DIRECTORY}
+   DESTINATION "."  # Will automatically get placed in "${CMAKE_INSTALL_LIBDIR}/modules"
+ )
+
+ # Generate an export file directly from your build directory - not required for this project
+# export(TARGETS lib_kmeans
+#    FILE "${CMAKE_CURRENT_BINARY_DIR}/kmeansTargets.cmake"
+#    NAMESPACE kmeans::
+# )
+
+# cmake export files
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/kmeansConfigVersion.cmake"
+    VERSION ${libkmeans_VERSION_MAJOR}.${libkmeans_VERSION_MINOR}.${libkmeans_VERSION_PATCH}
+    COMPATIBILITY AnyNewerVersion
+)
+install(
+    FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/kmeansConfigVersion.cmake"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/kmeans"
+    COMPONENT dev
+)
+
+# pkg-config file
+# Populate `kmeans.pc.in` template with cmake variables
+configure_file(cmake/kmeans.pc.in kmeans.pc @ONLY)
+install(
+   FILES ${CMAKE_CURRENT_BINARY_DIR}/kmeans.pc
+   DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
+   COMPONENT dev
+ )
+
