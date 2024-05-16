@@ -194,9 +194,10 @@ install(EXPORT KmeansTargets
 
 # Install the module files
 # Note, this must be consistent with cmake/kmeans.pc.in
+# Copies directory ${CMAKE_Fortran_MODULE_DIRECTORY} to relative DESTINATION in installation folder
 install(
    DIRECTORY ${CMAKE_Fortran_MODULE_DIRECTORY}
-   DESTINATION "${CMAKE_INSTALL_PREFIX}"    #Copies directory ${CMAKE_Fortran_MODULE_DIRECTORY}, to this location
+   DESTINATION "."
    )
 
 # Generate an export file directly for the build folder
