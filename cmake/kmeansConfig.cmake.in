@@ -4,7 +4,7 @@ include(CMakeFindDependencyMacro)
 find_dependency(OpenMP REQUIRED)
 find_dependency(MPI)
 # Include the Targets file to bring in the exported targets
-include(@CMAKE_INSTALL_PREFIX@/@CMAKE_INSTALL_LIBDIR@/cmake/kmeans/KmeansTargets.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/KmeansTargets.cmake)
 
 set(kmeans_VERSION @PROJECT_VERSION@)
 set(kmeans_LIBRARIES kmeans::lib_kmeans)
