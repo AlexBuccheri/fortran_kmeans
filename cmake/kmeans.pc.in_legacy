@@ -1,0 +1,10 @@
+Name: @PROJECT_NAME@
+Description: @PROJECT_DESCRIPTION@
+Version: @libkmeans_VERSION_MAJOR@
+libdir=@CMAKE_INSTALL_FULL_LIBDIR@
+includedir=@CMAKE_INSTALL_PREFIX@/modules 
+
+Cflags: -I@CMAKE_INSTALL_PREFIX@/modules
+Libs: -L@CMAKE_INSTALL_FULL_LIBDIR@ -lkmeans @MPI_LIBRARIES@ -lmpi_usempif08
+
+

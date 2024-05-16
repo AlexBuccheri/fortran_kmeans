@@ -1,0 +1,10 @@
+Name: @PROJECT_NAME@
+Description: @PROJECT_DESCRIPTION@
+Version: @PROJECT_VERSION@
+prefix=@CMAKE_INSTALL_PREFIX@
+libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+moddir=${prefix}/@CMAKE_INSTALL_LIBDIR@/modules  # THis is inconsistent with what I use
+
+Cflags: -I${includedir}
+Libs: -L${libdir} -l$<TARGET_LINKER_LIBRARY_FILE_BASE_NAME:lib_kmeans> $<TARGET_PROPERTY:lib_kmeans,INTERFACE_LINK_LIBRARIES>
