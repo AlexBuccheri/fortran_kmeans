@@ -57,8 +57,8 @@ jobs:
       - name: Build project
         run: cmake --build cmake-build-debug
 
-      # - name: Run ctest. This won't work due to the current implementation of test framework fixtures - see the README.
-      #   run: ctest --test-dir ./cmake-build-debug --output-on-failure
+      - name: Run ctest
+        run: ctest --test-dir ./cmake-build-debug --output-on-failure
 
       - name: Run Jupyter tests
         run: jupyter nbconvert --execute  jupyter/kmeans.ipynb --to markdown
@@ -92,11 +92,12 @@ jobs:
       - name: Install cmake
         run: pip3 install cmake
 
-      - name: Install Python Packages
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          # Install from requirements as there is not a python project present
-          pip install -r requirements.txt
+      # Not needed as not running Jupyter
+      # - name: Install Python Packages
+      #   run: |
+      #     python -m pip install --upgrade pip setuptools wheel
+      #     # Install from requirements as there is not a python project present
+      #     pip install -r requirements.txt
 
       - name: Set Compiler
         run: |
@@ -112,7 +113,6 @@ jobs:
 
       - name: Run ctest
         run: ctest --test-dir ./cmake-build-debug --output-on-failure
-
 
 
   # TODO Modify me as appropriate
