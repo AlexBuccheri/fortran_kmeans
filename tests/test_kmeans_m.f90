@@ -2,11 +2,6 @@ program test_kmeans_m
     use, intrinsic :: iso_fortran_env, only: dp => real64
     use omp_lib
 
-    ! Get via wrapper
-    ! use fortuno_serial, only : execute_serial_cmd_app, is_equal, & 
-    !    test => serial_case_item,&
-    !    check => serial_check
-
     use fortuno_interface_m, only: execute_cmd_app, test, check, is_equal
     use grids_m,             only: linspace, linspace_to_grid, generate_gaussian
     use maths_m,             only: all_close

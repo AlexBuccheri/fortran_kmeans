@@ -137,6 +137,7 @@ set_target_properties(fortuno_wrapper PROPERTIES
 target_link_libraries(fortuno_wrapper PUBLIC 
    ${fortuno_libs} 
    $<$<BOOL:${MPI}>:MPI::MPI_Fortran>
+   common_flags
    )
 
 #[==============================================================================================[
