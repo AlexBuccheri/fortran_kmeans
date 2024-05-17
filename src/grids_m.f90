@@ -6,7 +6,8 @@ module grids_m
     private
 
     ! Exposed routines
-    public :: generate_real_space_grid, linspace, linspace_to_grid, generate_gaussian
+    public :: generate_real_space_grid, linspace, linspace_to_grid, generate_gaussian, &
+            &  discretise_values_to_grid
 
     interface linspace_to_grid
         module procedure :: linspace_to_grid2d, linspace_to_grid3d, linspace_to_grid_suboptimal
@@ -240,7 +241,7 @@ contains
 
 
     ! Serial reference
-    subroutine discretise_values_to_grid_serial(values, grid)
+    subroutine discretise_values_to_grid(values, grid)
         real(real64), intent(inout) :: values(:, :)  !< In: Continuous values  (n_dim, M) 
         !                                               Out: Discretised values (n_dim, M) 
         real(real64), intent(in) :: grid(:, :)        !< Discrete grid (n_dim, Nr)
@@ -268,7 +269,7 @@ contains
             values(:, iopt) = grid(:, iopt)
         enddo
 
-    end subroutine discretise_values_to_grid_serial
+    end subroutine discretise_values_to_grid
 
 
     ! For parallel, one should work with the integer representation of the grid, not the real.
