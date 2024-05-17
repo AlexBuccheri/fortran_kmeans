@@ -1,6 +1,13 @@
 # Build directories
 /cmake-build*
+/serial-*
+# Install 
+*install
 # VS Code files
 *.mod 
+# Jetbrains files
+/.idea
 # Fortran outputs i.e. write(101, *) ...
 fort.*
+# ctest outputs
+Testing
