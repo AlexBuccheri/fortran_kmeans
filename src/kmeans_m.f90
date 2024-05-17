@@ -1,8 +1,13 @@
 !> @brief Module implementing k-means clustering algorithms
 module kmeans_m
     use, intrinsic :: iso_fortran_env
+    use, intrinsic :: ieee_arithmetic
     use omp_lib
+#ifdef USE_MPI          
+    use mpi, only: MPI_DOUBLE_PRECISION, MPI_SUM, MPI_ALLREDUCE, MPI_IN_PLACE
+#endif 
     use mpi_m, only: mpi_t
+
     implicit none
 
     private
@@ -73,9 +78,6 @@ contains
     !! \f]
     !! where \f$\mathbf{r}_j\f$ and \f$w(\mathbf{r}_j\f$ are grid points and weights restricted to the cluster \f$ C_\mu \f$, respectively.
     subroutine update_centroids(comm, grid, weight, ir_to_ic, centroids)
-#ifdef USE_MPI          
-        use mpi, only: MPI_DOUBLE_PRECISION, MPI_SUM, MPI_ALLREDUCE, MPI_IN_PLACE
-#endif 
         type(mpi_t),  intent(inout) :: comm                     !< MPI instance
         real(real64), intent(in)    :: grid(:, :)               !< Real-space grid (n_dims, N)
         real(real64), intent(in)    :: weight(:)                !< Weights (N)
@@ -240,7 +242,9 @@ contains
         if (present(centroid_tol)) tol = centroid_tol
 
         print_out = .false.
-        if (present(verbose)) print_out = verbose
+        if (present(verbose)) then
+            if (comm%is_root()) print_out = verbose
+        endif
 
         nr = size(grid, 2)
         n_dim = size(grid, 1)
@@ -275,7 +279,7 @@ contains
                 prior_centroids = centroids
             else
                 ! TODO Return number of iterations used
-                write(*, *) 'All points converged'
+                if (print_out) write(*, *) 'All points converged'
                 return 
             endif
         enddo
