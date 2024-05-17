@@ -88,6 +88,7 @@ contains
         
         integer                   :: n_dims, nr, n_centroids, ir, ic
         real(real64)              :: tmp
+        real(real64), parameter :: zero_tol = 1.e-10_real64     !< Empirically defined
         real(real64), allocatable :: denominator(:)
 
         n_dims = size(grid, 1)
@@ -118,6 +119,7 @@ contains
             ic = ir_to_ic(ir)
             ! Initially accumulate the numerator in `centroids`
             centroids(:, ic) = centroids(:, ic) + (grid(:, ir) * weight(ir))
+            ! write(*, *) ir, centroids(:, ic)
             denominator(ic) = denominator(ic) + weight(ir)
         enddo
 
@@ -131,6 +133,8 @@ contains
         ! Finish defining centroids as numerator / denominator
         !$omp parallel do simd private(tmp) reduction(* : centroids)
         do ic = 1, n_centroids
+            ! Avoid division by zero in clusters where there is no weight
+            if (abs(denominator(ic)) < zero_tol) cycle
             tmp = 1._real64 / denominator(ic)
             centroids(:, ic) = centroids(:, ic) * tmp
         enddo
@@ -272,7 +276,9 @@ contains
         do i = 1, n_iterations
             if (print_out) write(*, *) 'Iteration ', i
             call assign_points_to_centroids(grid, centroids, ir_to_ic)
+            write(*, *) 'Into update'
             call update_centroids(comm, grid, weight, ir_to_ic, centroids)
+            write(*, *) 'Out of update'
             call compute_grid_difference(prior_centroids, centroids, tol, points_differ)
             if (any(points_differ)) then
                 if (print_out) call report_differences_in_grids(prior_centroids, centroids, tol, points_differ)
