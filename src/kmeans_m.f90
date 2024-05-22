@@ -1,7 +1,6 @@
 !> @brief Module implementing k-means clustering algorithms
 module kmeans_m
     use, intrinsic :: iso_fortran_env
-    use, intrinsic :: ieee_arithmetic
     use omp_lib
 #ifdef USE_MPI          
     use mpi, only: MPI_DOUBLE_PRECISION, MPI_SUM, MPI_ALLREDUCE, MPI_IN_PLACE
@@ -34,10 +33,11 @@ contains
         real(real64), intent(in)  :: centroids(:, :)       !< Centroid positions (n_dims, Ncentroids)
         integer,      intent(out) :: ir_to_ic(:)           !< Index array that maps grid indices to centroid indices
 
-        integer :: ir, ic, icen
+        integer :: ir, ic, icen, n_unassigned
         integer :: n_dims                                  !< System dimensions
         integer :: n_points                                !< Number of grid points
         integer :: n_centroids                             !< Number of centroids
+        integer, allocatable :: npoints_per_cluster(:)
         real(real64) :: dist, min_dist
 
         n_dims = size(grid_points, 1)
@@ -54,6 +54,12 @@ contains
             error stop 102
         endif
 
+        ! For sanity checking only: Check if any centroids have not been assigned
+        ! If this is the case, it suggests that one or more input centroids
+        ! are duplicates - this can happen if one does not take care with random
+        ! number generation used to do the initial sampling of centroids
+        allocate(npoints_per_cluster(n_centroids), source=0)
+
         do ir = 1, n_points
             icen = 1
             min_dist = sum((centroids(:, 1) - grid_points(:, ir))**2)
@@ -65,8 +71,26 @@ contains
                 endif
             enddo
             ir_to_ic(ir) = icen
+            npoints_per_cluster(icen) = npoints_per_cluster(icen) + 1
         enddo 
         
+        ! Sanity checking
+        n_unassigned = 0
+        do ic = 1, n_centroids
+            if (npoints_per_cluster(icen) == 0) then
+                n_unassigned = n_unassigned + 1
+                write(*, *) 'Centroid', ic, 'was not assigned any grid points'
+            endif
+        enddo
+        if (n_unassigned > 0) then
+            write(*, *) n_unassigned, 'centroids were not assigned grid points'
+            write(*, *) 'This can happen when there are two or more centroids with the same point,'
+            write(*, *) 'which can occur if the same random number is generated multiple times (for example)'
+            write(*, *) 'in the initial sampling of centroid points'
+            error stop 102
+        endif
+        deallocate(npoints_per_cluster)
+
     end subroutine assign_points_to_centroids
 
 
@@ -119,7 +143,6 @@ contains
             ic = ir_to_ic(ir)
             ! Initially accumulate the numerator in `centroids`
             centroids(:, ic) = centroids(:, ic) + (grid(:, ir) * weight(ir))
-            ! write(*, *) ir, centroids(:, ic)
             denominator(ic) = denominator(ic) + weight(ir)
         enddo
 
@@ -131,10 +154,11 @@ contains
 #endif         
 
         ! Finish defining centroids as numerator / denominator
+        ! If the code crashes here due to division by zero, it implies that the sum(weight) = 0 for all grid points
+        ! in cluster ic. This can occur if the initial centroids are poorly chosen i.e.
+        ! do not choice centroids in regions of no weight (such as the vacuum of a crystal cell)
         !$omp parallel do simd private(tmp) reduction(* : centroids)
         do ic = 1, n_centroids
-            ! Avoid division by zero in clusters where there is no weight
-            if (abs(denominator(ic)) < zero_tol) cycle
             tmp = 1._real64 / denominator(ic)
             centroids(:, ic) = centroids(:, ic) * tmp
         enddo
@@ -182,7 +206,6 @@ contains
         integer, allocatable :: indices(:)
         integer :: i, j, n_unconverged
         real(real64), allocatable :: diff(:)
-        character(len=100) :: fmt
 
         indices = pack([(i, i=1,size(points_differ))], points_differ)
         n_unconverged = size(indices)
@@ -197,6 +220,64 @@ contains
         write(*, *) "Summary:", n_unconverged, "of out", size(points, 2), "are not converged"
    
     end subroutine report_differences_in_grids
+
+
+    !> @brief Check that the sum of the weight for a given centroid/cluster is finite.
+    !!
+    !! If a centroid is chosen such that the total weight associated with the 
+    !! cluster''s grid points is zero, updating its position will fail due to a division by zero.
+    !! This can occur if an initial centroid is chosen in a region of a cell, far away
+    !! from any density (for example) i.e. in the vacuum of a cell.
+    subroutine check_weight_at_centroids(comm, weight, ir_to_ic, centroids, null_centroid_indices)
+        type(mpi_t),  intent(inout) :: comm                     !< MPI instance
+        real(real64), intent(in)    :: weight(:)                !< Weights (np)
+        integer,      intent(in)    :: ir_to_ic(:)              !< Map grid indices to centroid indices (np)
+        real(real64), intent(in)    :: centroids(:, :)          !< Centroids (n_dims, Ncentroids)
+        integer,      allocatable, intent(out)   :: null_centroid_indices(:) !< Centroids defined where weight < tol
+
+        integer                   :: np, n_centroids, ir, ic, n_empty
+        integer,      allocatable :: tmp_indices(:)
+        real(real64), allocatable :: summed_weight(:)           !< Summed weight function, for each cluster
+        real(real64), parameter   :: tol = 1.e-8_real64
+
+        np = size(weight)
+        n_centroids = size(centroids, 2)
+        allocate(summed_weight(n_centroids))
+
+        !$omp parallel default(shared)
+
+        !$omp do simd
+        do ic = 1, n_centroids
+            summed_weight(ic) = 0._real64
+        enddo
+
+        ! Iterate over all grid points
+        !$omp do simd private(ic) reduction(+ : summed_weight)
+        do ir = 1, np
+            ic = ir_to_ic(ir)
+            summed_weight(ic) = summed_weight(ic) + weight(ir)
+        enddo
+
+        !$omp end parallel
+
+#ifdef USE_MPI         
+        call MPI_ALLREDUCE(MPI_IN_PLACE, summed_weight, np, MPI_DOUBLE_PRECISION, MPI_SUM, comm%comm, comm%ierr)
+#endif         
+
+        allocate(tmp_indices(n_centroids))
+        n_empty = 0
+        do ic = 1, n_centroids
+            if (abs(summed_weight(ic)) < tol) then
+                n_empty = n_empty + 1
+                tmp_indices(n_empty) = ic
+            endif
+        enddo
+        if (n_empty > 0) then
+            allocate(null_centroid_indices(n_empty), source=tmp_indices(1:n_empty))
+        endif
+        deallocate(tmp_indices)
+
+    end subroutine check_weight_at_centroids
 
 
     !> @brief Weighted K-means clustering.
@@ -231,10 +312,10 @@ contains
         logical,      optional, intent(in) :: verbose            !< Verbosity
   
         logical          :: print_out
-        integer          :: n_iterations, nr, n_dim, n_centroid, i
+        integer          :: n_iterations, nr, n_dim, n_centroid, i, j, ic
         real(real64)     :: tol
 
-        integer,      allocatable :: ir_to_ic(:)
+        integer,      allocatable :: ir_to_ic(:), null_centroid_indices(:)
         real(real64), allocatable :: prior_centroids(:, :)
         logical,      allocatable :: points_differ(:)
 
@@ -275,11 +356,23 @@ contains
 
         do i = 1, n_iterations
             if (print_out) write(*, *) 'Iteration ', i
+
             call assign_points_to_centroids(grid, centroids, ir_to_ic)
-            write(*, *) 'Into update'
+            ! Sanity check for input centroids
+            if (i == 1) then
+                call check_weight_at_centroids(comm, weight, ir_to_ic,  centroids, null_centroid_indices)
+                if (allocated(null_centroid_indices)) then
+                    do j = 1, size(null_centroid_indices)
+                        ic = null_centroid_indices(j)
+                        write(*, *) 'Centroid ' , ic , 'at position' , centroids(:, ic) , ' has no associated weight'
+                    enddo
+                    error stop 104
+                endif
+            endif
+
             call update_centroids(comm, grid, weight, ir_to_ic, centroids)
-            write(*, *) 'Out of update'
             call compute_grid_difference(prior_centroids, centroids, tol, points_differ)
+
             if (any(points_differ)) then
                 if (print_out) call report_differences_in_grids(prior_centroids, centroids, tol, points_differ)
                 prior_centroids = centroids
@@ -288,6 +381,7 @@ contains
                 if (print_out) write(*, *) 'All points converged'
                 return 
             endif
+
         enddo
 
         ! TODO Return number of iterations used
