@@ -9,7 +9,8 @@ program test_grids_m
     use omp_lib
     use fortuno_interface_m, only: execute_cmd_app, test, check, is_equal
     use maths_m, only: all_close
-    use grids_m, only: generate_real_space_grid, linspace, linspace_to_grid, generate_gaussian
+    use grids_m, only: generate_real_space_grid, linspace, linspace_to_grid, generate_gaussian, &
+     & discretise_values_to_grid
 
     implicit none
 
@@ -21,11 +22,11 @@ program test_grids_m
             test("Real-space 3D grid", test_generate_real_space_grid_3D), &
             test("Linear spaced sampling", test_linspace), &
             test("2D linear grid", test_linspace_to_grid2d), & 
-            test("2D Gaussian", test_generate_gaussian_2d) &
+            test("2D Gaussian", test_generate_gaussian_2d), &
+            test("Discretise values to grid", test_discretise_values_to_grid) &
             ])
   
 contains
-
 
     subroutine test_generate_real_space_grid_1D
         integer      :: sampling(1)
@@ -228,6 +229,53 @@ contains
 
 
     ! TODO(Alex) test_linspace_to_grid3d
+
+    
+    subroutine test_discretise_values_to_grid()
+        real(dp), allocatable :: x(:), y(:), z(:), grid(:, :), spacing(:)
+        real(dp), allocatable :: values(:, :)
+        integer :: nx, ny, nz, ir, ix, iy, i, n_values
+        integer, parameter :: n_dim = 3
+
+        ! Generate a grid
+        nx = 5
+        ny = 5
+        nz = 5
+        allocate(x(nx), y(ny), z(nz), grid(n_dim, nx * ny * nz))
+        call linspace(1._dp, 5.0_dp, nx, x)
+        call linspace(1._dp, 5.0_dp, ny, y)
+        call linspace(1._dp, 5.0_dp, nz, z)
+        call linspace_to_grid(x, y, z, grid)
+
+        allocate(spacing(n_dim))
+        spacing = [x(2) - x(1), y(2) - y(1), z(2) - z(1)]
+
+        ! Sample some points and add some noise to define continuous values
+        n_values = 4
+        allocate(values(n_dim, n_values))
+        values(:, 1) = grid(:, 1)  + (0.1 * spacing)
+        values(:, 2) = grid(:, 10) + (0.4 * spacing)
+        values(:, 3) = grid(:, 99) + (0.33 * spacing)
+
+        ! Initial values
+        call check(all_close(values(:, 1), [1.1000000014901161_dp, 1.1000000014901161_dp, 1.1000000014901161_dp]))
+        call check(all_close(values(:, 2), [5.4000000059604645_dp, 2.4000000059604645_dp, 1.4000000059604645_dp]))
+        call check(all_close(values(:, 3), [4.3300000131130219_dp, 5.3300000131130219_dp, 4.3300000131130219_dp]))
+
+        ! Check that the returned points are assigned to the origin grid points
+        call discretise_values_to_grid(values, grid)
+
+        call check(all_close(values(:, 1), grid(:, 1)))
+        call check(all_close(values(:, 2), grid(:, 10)))
+        call check(all_close(values(:, 3), grid(:, 99)))
+
+        ! Continuous value that is equidistant to two discrete points
+        values(:, 4) = 0.5_dp * (grid(:, 1) + grid(:, 2))
+        call discretise_values_to_grid(values(:, 4:4), grid)
+        call check(all_close(values(:, 4), grid(:, 1)), msg="If a continuous value is equidistant to two or more points, &
+            & the routine will assign to the first discrete point it matches")
+
+    end subroutine test_discretise_values_to_grid
 
 
 end program test_grids_m

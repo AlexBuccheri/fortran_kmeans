@@ -2,6 +2,8 @@
 module grids_m
     use, intrinsic :: iso_fortran_env
     use omp_lib
+
+    use mpi_m, only: mpi_t
     implicit none
     private
 
@@ -13,8 +15,11 @@ module grids_m
         module procedure :: linspace_to_grid2d, linspace_to_grid3d, linspace_to_grid_suboptimal
     end interface linspace_to_grid
 
-contains
+    interface discretise_values_to_grid
+        module procedure :: discretise_values_to_grid_serial
+    end interface discretise_values_to_grid
 
+contains
 
     ! TODO(Alex) Does not make the most sense to provide both sampling and spacing => One has to work
     ! out what their box limits are
@@ -240,11 +245,15 @@ contains
     end subroutine generate_gaussian
 
 
-    ! Serial reference
-    subroutine discretise_values_to_grid(values, grid)
+    !> @brief Discretise continious values with discrete grid points.
+    !!
+    !! Perform a linear search through all grid points and replace each continuous
+    !! value with the closest discrete point. Note, this routine uses the metric 
+    !! ||r - r'||^2 rather than ||r - r'||, as it is faster to evaluate.
+    subroutine discretise_values_to_grid_serial(values, grid)
         real(real64), intent(inout) :: values(:, :)  !< In: Continuous values  (n_dim, M) 
         !                                               Out: Discretised values (n_dim, M) 
-        real(real64), intent(in) :: grid(:, :)        !< Discrete grid (n_dim, Nr)
+        real(real64), intent(in)    :: grid(:, :)    !< Discrete grid (n_dim, Nr)
         
         integer :: ir, iv, nr, iopt, n_dim
         real(real64) :: norm, new_norm
@@ -258,31 +267,26 @@ contains
             val = values(:, iv)
             ! Initialise 
             norm = sum((grid(:, 1) - val(:))**2)
-            iopt = -1
+            iopt = 1
             do ir = 2, nr
-                new_norm = sum((grid(:, 1) - val(:))**2)
+                new_norm = sum((grid(:, ir) - val(:))**2)
                 if (new_norm < norm) then
                     norm = new_norm
                     iopt = ir
                 endif
             enddo
-            values(:, iopt) = grid(:, iopt)
+            values(:, iv) = grid(:, iopt)
         enddo
 
-    end subroutine discretise_values_to_grid
+    end subroutine discretise_values_to_grid_serial
 
-
-    ! For parallel, one should work with the integer representation of the grid, not the real.
-    ! Better than suggestion below. Simpler than k-d tree search.
-
-    ! !> @brief Given a set of values that span the range of a grid, 
-    ! !! assign each value to the nearest, discrete grid point.
 
     ! !! Proper approach: Parallelised k-d tree search, but I'm not going to partition
     ! !! the grid up according to this. Particularly as this ultimately needs to work with metis
     ! !! (not clear that my idea will)
     ! !!
-    ! !! Outline of my idea:
+    ! !! Outline of my idea. Exactly the same as done in Octopus, except point a) makes 
+    ! !! it faster and approximation. Note that a) might be a terrible approximation
     ! !! a) Approximate or exactly compute min_norm per process
     ! !!   If approximate, one does so on a random sampling of points
     ! !!   Store mni_norm(1:Nv)
@@ -292,31 +296,46 @@ contains
     ! !!    - Store associated grid points
     ! !! d) allgatherv the grid points for discretised values
 
+    ! TODO(Alex) Implement MPI version of routine
     ! subroutine discretise_values_to_grid_mpi(comm, values, grid)
-    !     real(real64), intent(inout), :: values(:, :)  !< In: Continuous values  (n_dim, M) 
+    !     type(mpi_t),  intent(inout) :: comm          !< MPI instance
+    !     real(real64), intent(inout) :: values(:, :)  !< In: Continuous values  (n_dim, M) 
     !     !                                               Out: Discretised values (n_dim, M) 
-    !     real(real64), intent(in) :: grid(:, :)        !< Discrete grid (n_dim, Nr)
+    !     real(real64), intent(in)    :: grid(:, :)    !< Discrete grid (n_dim, Nr)
+        
+    !     integer       :: ir, iv, nr, n_dim, m_values
+    !     real(real64)  :: new_norm
+    !     integer,      allocatable :: iopt(:)
+    !     real(real64), allocatable :: norm(:), val(:)
 
-    !     integer :: n_dim, nr, ir, iv
-    !     real(real64) :: tmp_norm
-    !     real(real64), allocatable :: val(:)
-
+    !     m_values = size(values, 2)
     !     n_dim = size(grid, 1)
     !     nr = size(grid, 2)
     !     allocate(val(n_dim))
+    !     allocate(norm(m_values), iopt(m_values))
 
-    !     ! a) Compute min_norm for each value, using either all of the subgrid, 
-    !     ! or random sampling of the subgrid 
-    !     ! Could colapse this with OMP
-    !     do iv = 1, size(values, 2)
-    !         ! val = values(:, iv)
-    !         do ir = 1, nr
-    !             min_norm(i) = norm2(grid(:, ir) - values(:, i))
+    !     do iv = 1, m_values
+    !         val = values(:, iv)
+    !         ! Initialise 
+    !         norm(iv) = sum((grid(:, 1) - val(:))**2)
+    !         iopt(iv) = 1
+    !         do ir = 2, nr
+    !             new_norm = sum((grid(:, ir) - val(:))**2)
+    !             if (new_norm < norm(iv)) then
+    !                 norm(iv) = new_norm
+    !                 iopt(iv) = ir
+    !             endif
     !         enddo
     !     enddo
 
-    !     ! b) For each process, store the iv of min_norm(iv) that are minimised over all processes
-    ! NOT FINISHED
+    ! TODO(Alex) This needs working out/routines need to be written
+    !     ! Get the min from all the processes, for each element of 
+    !     ! Return ir of min(norm), for each iv and associated iprocess
+    !     ! bcast ir array to all machines
+    !     ! do iv = 1, m_values
+    !     !     ir = iopt(iv)
+    !     !     values(:, iv) = index_to_point(comm, ir)
+    !     ! enddo
 
     ! end subroutine discretise_values_to_grid_mpi
 

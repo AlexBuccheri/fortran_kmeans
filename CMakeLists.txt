@@ -164,6 +164,7 @@ add_test(NAME test_generate_real_space_grid_3D COMMAND test_grids "Real-space 3D
 add_test(NAME test_linspace COMMAND test_grids "Linear spaced sampling")
 add_test(NAME test_linspace_to_grid2d COMMAND test_grids "2D linear grid")
 add_test(NAME test_generate_gaussian_2d COMMAND test_grids "2D Gaussian")
+add_test(NAME test_discretise_values_to_grid COMMAND test_grids "Discretise values to grid")
 
 # k-means module
 add_executable(test_kmeans tests/test_kmeans_m.F90)
